@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 1200 1000"
+     width="1200" height="1000">
+  <g fill="none"
+     stroke="#F4C21C"
+     stroke-width="62"
+     stroke-linecap="round"
+     stroke-linejoin="round">
+
+    <!-- Silhouette sinistra -->
+    <path d="
+      M 250 820
+      L 250 430
+      L 500 185
+      L 750 430
+      L 750 820
+    "/>
+
+    <!-- Chevron interno -->
+    <path d="
+      M 250 620
+      L 500 390
+      L 750 620
+    "/>
+
+    <!-- Silhouette parziale destra, separata -->
+    <path d="
+      M 710 275
+      L 815 185
+      L 980 350
+      L 980 820
+      L 915 770
+    "/>
+  </g>
+</svg>

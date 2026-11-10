@@ -1,0 +1,130 @@
+market:
+  country: IT
+  currency: EUR
+  locale: it-IT
+  assumptionsVersion: "2025.09-mvp"
+providers:
+  geocoding: nominatim
+  mapTiles: user-device
+map:
+  defaultZoom: 19
+  manualPositioningAllowed: true
+solar:
+  # Profilo sintetico mensile di produzione per kWp installato.
+  # Unità: kWh/kWp/mese. Ambito: Italia media. Fonte attesa: PVGIS o dataset equivalente.
+  # Ultimo aggiornamento: 2025-09-12. Revisione: annuale. Impatta produzione, ROI e confidenza.
+  monthlyKwhPerKwp: [55, 70, 105, 125, 145, 155, 165, 150, 120, 90, 60, 45]
+  performanceRatio: 0.82
+  azimuthLossPer90Deg: 0.18
+  pitchOptimalDeg: 30
+  pitchLossPer30Deg: 0.08
+roof:
+  defaultPitchDeg:
+    flat: 5
+    low: 15
+    normal: 30
+    steep: 45
+  panelMarginM: 0.35
+  panelSpacingM: 0.08
+pv:
+  panel:
+    # Potenza nominale del pannello tecnico generico usato nell'MVP.
+    # Unità: watt-peak. Non identifica un prodotto commerciale. Rivedere annualmente insieme a dimensioni ed efficienza.
+    powerWp: 450
+    widthM: 1.13
+    heightM: 1.76
+    efficiency: 0.21
+  installationCost:
+    # Quota indipendente dai kWp: pratiche, mobilitazione e costi minimi.
+    # Unità: EUR. Fonte attesa: mediana preventivi residenziali italiani. Revisione annuale.
+    fixedEur: 1500
+    # Quota variabile moltiplicata per kWp installati. Unità: EUR/kWp. Impatta investimento e ROI.
+    variableEurPerKwp: 1350
+battery:
+  candidateKwh: [0, 5, 10, 15]
+  usableShare: 0.9
+  roundTripEfficiency: 0.9
+  maxPowerKwPerKwh: 0.5
+  initialSocShare: 0.5
+  cost:
+    fixedEur: 600
+    variableEurPerKwh: 520
+consumptionProfiles:
+  monthlyShares: [0.095, 0.085, 0.083, 0.075, 0.075, 0.08, 0.09, 0.09, 0.075, 0.08, 0.085, 0.087]
+  hourlyByOccupancy:
+    morning: [0.018,0.014,0.012,0.012,0.014,0.04,0.075,0.07,0.045,0.03,0.028,0.03,0.035,0.032,0.03,0.032,0.045,0.06,0.075,0.08,0.075,0.06,0.045,0.028]
+    day: [0.018,0.014,0.012,0.012,0.014,0.028,0.04,0.055,0.065,0.06,0.055,0.055,0.06,0.055,0.055,0.06,0.06,0.055,0.05,0.048,0.045,0.04,0.032,0.022]
+    evening: [0.014,0.012,0.011,0.011,0.012,0.018,0.026,0.032,0.035,0.032,0.03,0.032,0.038,0.036,0.034,0.038,0.052,0.075,0.092,0.105,0.1,0.085,0.055,0.03]
+    always: [0.03,0.026,0.024,0.024,0.026,0.034,0.045,0.048,0.048,0.046,0.044,0.044,0.047,0.045,0.044,0.046,0.05,0.055,0.06,0.062,0.058,0.048,0.04,0.03]
+electrification:
+  kwhThermalPerSmc: 10.7
+  currentBoilerEfficiency: 0.9
+  heatPumpScop: 3.2
+  hotWaterKwhPerPersonYear: 520
+  inductionKwhPerPersonYear: 150
+ev:
+  defaultConsumptionKwh100Km: 17
+  defaultHomeChargingShare: 0.8
+  chargingHourlyWeights:
+    night: [0.09,0.11,0.12,0.12,0.11,0.09,0.06,0.03,0.01,0,0,0,0,0,0,0,0.01,0.02,0.03,0.04,0.05,0.06,0.05,0.04]
+    random: [0.035,0.03,0.025,0.02,0.02,0.025,0.035,0.04,0.04,0.035,0.035,0.04,0.045,0.045,0.04,0.04,0.045,0.055,0.06,0.065,0.065,0.06,0.05,0.04]
+    solar: [0,0,0,0,0,0,0.02,0.04,0.06,0.08,0.1,0.12,0.13,0.12,0.1,0.08,0.06,0.04,0.02,0,0,0,0,0]
+energyPrices:
+  electricity:
+    # Prezzo totale medio pagato per kWh prelevato. Unità EUR/kWh. Ambito: cliente domestico italiano.
+    defaultPurchaseEurPerKwh: 0.30
+  export:
+    defaultEurPerKwh: 0.10
+  gas:
+    defaultEurPerSmc: 1.15
+  fuel:
+    defaultEurPerLiter: 1.85
+costModels:
+  pv: formula_fixed_plus_kwp
+  battery: formula_fixed_plus_kwh
+optimizer:
+  minEconomicUtilityEur: 100
+  candidatePanelFractions: [0.45, 0.65, 0.85, 1]
+  recommendationWeights:
+    savings: 0.35
+    payback: 0.25
+    bill: 0.2
+    investment: 0.1
+    confidence: 0.1
+confidence:
+  reductions:
+    manualRoof: 1
+    defaultPitch: 1
+    gasExpense: 1
+    syntheticSolar: 1
+    forcedCapacity: 1
+persistence:
+  schemaVersion: 1
+seoPages:
+  - slug: /fotovoltaico-con-auto-elettrica
+    locale: it
+    enabled: true
+    seoTitle: "Fotovoltaico con auto elettrica: simulatore per casa"
+    metaDescription: "Stima quanta energia serve per ricaricare un'auto elettrica a casa e quale impianto fotovoltaico può convenire."
+    h1: "Fotovoltaico e auto elettrica"
+    intro: "Parti da uno scenario con EV già attiva e personalizza casa, consumi e tetto."
+    preset:
+      mobility.evEnabled: true
+    contentSlots:
+      home.afterHero: "Scenario preimpostato per chi sta valutando un'auto elettrica."
+      results.beforeScenarios: "Confronta bolletta, autoconsumo e ritorno economico includendo la ricarica domestica."
+    faq:
+      - question: "Serve sempre una batteria con l'auto elettrica?"
+        answer: "No. Dipende da orari di ricarica, produzione solare e tariffe."
+  - slug: /dimensionamento-accumulo-fotovoltaico
+    locale: it
+    enabled: true
+    seoTitle: "Dimensionamento accumulo fotovoltaico domestico"
+    metaDescription: "Calcola orientativamente quanto può servire una batteria per aumentare autoconsumo e autosufficienza."
+    h1: "Dimensionare l'accumulo fotovoltaico"
+    intro: "Simula taglie diverse di batteria senza dati inviati a un server proprietario."
+featureFlags:
+  telemetry: false
+  csvImport: true
+legal:
+  disclaimer: "Stima orientativa: non sostituisce sopralluogo, progettazione professionale o offerta commerciale."
