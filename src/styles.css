@@ -561,8 +561,58 @@ small {
 .roof-drawing-panel h2 {
   margin-top: 0;
 }
+.roof-manager-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.7rem;
+}
+.roof-manager-heading h2 {
+  margin: 0;
+}
+.roof-manager-heading + p {
+  margin-top: 0;
+}
+.roof-add-plane-icon {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 10px;
+}
 .roof-draw-start {
   width: 100%;
+  min-height: 52px;
+  border-radius: 12px;
+  font-weight: 700;
+}
+.roof-preview-planes {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+}
+.roof-preview-planes li {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid #dbe7e8;
+}
+.roof-preview-planes span,
+.roof-preview-note {
+  font-size: 0.85rem;
+  color: #48627a;
+}
+.roof-preview-actions {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+.roof-preview-actions button {
+  width: 100%;
+  min-height: 48px;
   border-radius: 12px;
 }
 .roof-drawing-actions {
@@ -571,8 +621,13 @@ small {
   gap: 0.55rem;
   margin: 1rem 0;
 }
-.roof-drawing-actions strong {
+.roof-drawing-actions strong,
+.roof-plane-name-field {
   grid-column: 1 / -1;
+}
+.roof-plane-name-field input {
+  width: 100%;
+  min-width: 0;
 }
 .roof-drawing-actions button {
   border-radius: 10px;
@@ -583,6 +638,94 @@ small {
 .roof-area-list {
   margin-top: 1rem;
 }
+.roof-optional-settings {
+  margin-top: 1.2rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #dbe7e8;
+}
+.roof-optional-caption {
+  margin: 0 0 0.35rem;
+  color: #48627a;
+  font-size: 0.8rem;
+}
+.roof-accordion-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 44px;
+  padding: 0.7rem 0;
+  border: 0;
+  border-bottom: 1px solid #dbe7e8;
+  border-radius: 0;
+  background: transparent;
+  color: #0b3550;
+  text-align: left;
+  font-size: 0.9rem;
+}
+.roof-accordion-toggle svg {
+  flex-shrink: 0;
+}
+.roof-accordion-toggle[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+.roof-accordion-toggle:hover {
+  background: #f0f7f7;
+}
+.roof-accordion-toggle:focus-visible {
+  outline: 2px solid #0f766e;
+  outline-offset: 3px;
+}
+.roof-optional-settings .pitch-grid {
+  margin: 0.75rem 0;
+}
+.roof-page .roof-obstacle-editor,
+.roof-page .roof-subdivision-editor {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.75rem;
+  padding: 0.85rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+.roof-page .roof-obstacle-editor h3,
+.roof-page .roof-obstacle-editor p,
+.roof-page .roof-subdivision-editor p {
+  margin: 0;
+}
+.roof-page .roof-obstacle-editor p,
+.roof-page .roof-subdivision-editor p {
+  font-size: 0.85rem;
+}
+.roof-obstacle-toolbar {
+  display: grid;
+  gap: 0.65rem;
+}
+.roof-obstacle-toolbar.has-items {
+  grid-template-columns: minmax(0, 1fr) 40px;
+  align-items: end;
+}
+.roof-obstacle-toolbar label,
+.roof-obstacle-toolbar select {
+  min-width: 0;
+  width: 100%;
+}
+.roof-obstacle-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 40px;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.5rem;
+  border: 1px solid #dbe7e8;
+  border-radius: 10px;
+  background: white;
+}
+.roof-obstacle-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .roof-empty-state {
   padding: 1rem;
   border: 1px dashed #94a3b8;
@@ -590,27 +733,44 @@ small {
   color: #48627a;
   text-align: center;
 }
-.plane-row .roof-delete-area {
-  display: block;
-  width: auto;
-  height: auto;
-  margin-top: 0.25rem;
+.plane-row .roof-delete-area,
+.roof-remove-item-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin: 0;
   padding: 0;
-  background: transparent;
+  border: 1px solid #f3c6c2;
+  border-radius: 8px;
+  background: #fff5f4;
   color: #b42318;
-  font-size: 0.75rem;
-  text-decoration: underline;
+}
+.plane-row .roof-delete-area:hover,
+.roof-remove-item-icon:hover {
+  background: #fee2e2;
+}
+.roof-plane-area {
+  white-space: nowrap;
+  font-size: 0.85rem;
 }
 .plane-row {
   display: grid;
-  grid-template-columns: 36px 1fr 100px;
+  grid-template-columns: 32px minmax(0, 1fr) auto 40px;
   align-items: center;
-  gap: 0.8rem;
+  gap: 0.5rem;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
-  padding: 0.8rem;
-  margin: 0.55rem 0;
+  padding: 0.5rem;
+  margin: 0.45rem 0;
   background: #f8fafc;
+}
+.plane-row .roof-plane-name {
+  width: 100%;
+  min-width: 0;
+  padding: 0.5rem;
+  font-weight: 600;
+  background: #ffffffcc;
 }
 .plane-row:first-of-type {
   background: #edfbe9;
@@ -1648,7 +1808,7 @@ details label {
   border-radius: 12px;
 }
 .roof-map-label {
-  padding: 0.25rem 0.5rem;
+  padding: calc(0.25rem * var(--roof-map-ui-scale, 1)) calc(0.5rem * var(--roof-map-ui-scale, 1));
   border-radius: 999px;
   background: #08263cdd;
   box-shadow: 0 4px 12px #0018;
@@ -1739,6 +1899,59 @@ details label {
 .google-map-canvas {
   position: absolute;
   inset: 0;
+}
+.roof-map-viewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  touch-action: none;
+}
+/* Counter-scale Google's original attribution containers, including their
+   layout footprint. Keep logo, copyright and terms readable at every zoom;
+   do not clone, replace or hide any attribution supplied by Maps.
+   Match the native UI wrappers (the logo is nested two levels down).
+   Direct-child control matches avoid scaling the scene/marker panes. */
+.roof-map-viewport .gm-style > div:has(.gm-style-cc),
+.roof-map-viewport .gm-style > div:has(> div > a[href*="maps.google."]),
+.roof-map-viewport .gm-style > div:has(> .gmnoprint),
+.roof-map-viewport .gm-style > div:has(> .gm-control-active) {
+  zoom: var(--roof-map-ui-scale, 1);
+}
+.roof-work-zoom {
+  position: absolute;
+  z-index: 3;
+  top: 1rem;
+  right: 1rem;
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.7rem;
+  border-radius: 12px;
+  background: #fffffff7;
+  color: #0b1b33;
+  box-shadow: 0 6px 24px #0015;
+}
+.roof-work-zoom > span {
+  font-weight: 700;
+}
+.roof-work-zoom > div {
+  display: flex;
+  gap: 0.35rem;
+}
+.roof-work-zoom button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0.4rem;
+  border: 1px solid #cbdce2;
+  background: white;
+  color: #0b3550;
+  border-radius: 8px;
+}
+.roof-work-zoom button[aria-pressed="true"] {
+  background: #ffca28;
+  border-color: #ffca28;
+}
+.roof-work-zoom small {
+  font-size: 0.75rem;
 }
 .fixed-center-pin {
   position: absolute;
@@ -1868,11 +2081,19 @@ details label {
     min-height: 0;
     overflow: visible;
   }
-  .roof-map-shell .roof-map-canvas,
-  .panels-map-shell .google-map-canvas {
+  .roof-map-viewport {
     position: relative;
     height: 58vh;
     min-height: 430px;
+  }
+  .roof-map-shell .roof-map-canvas,
+  .panels-map-shell .roof-map-canvas {
+    position: absolute;
+    min-height: 0;
+  }
+  .roof-work-zoom {
+    top: 0.5rem;
+    right: 0.5rem;
   }
   .panels-control-panel {
     position: relative;

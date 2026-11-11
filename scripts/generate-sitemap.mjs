@@ -8,6 +8,7 @@ if (!fs.existsSync(dist)) process.exit(0);
 const indexPath = path.join(dist,'index.html');
 const index = fs.readFileSync(indexPath,'utf8');
 const enabled = (cfg.seoPages ?? []).filter(p => p.enabled);
+// Keep /pannelli as a legacy app-shell entry; the client replaces it with /tetto.
 const appRoutes = ['/trova-casa', '/tetto', '/pannelli', '/consumi', '/casa-futura', '/mobilita', '/prezzi', '/risultati'];
 for (const route of appRoutes) {
   const dir = path.join(dist, route.replace(/^\//,''));

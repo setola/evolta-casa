@@ -1,0 +1,10 @@
+{
+	admin off
+	auto_https disable_redirects
+	skip_install_trust
+}
+
+https://{$DEV_HOST}:8443 {
+	tls internal
+	reverse_proxy web:5173
+}

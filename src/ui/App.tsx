@@ -1,16 +1,21 @@
-import { Download, Play, Save, Upload } from "lucide-react";
+import { ChevronDown, Download, Minus, Play, Plus, Save, Upload } from "lucide-react";
+import { RoofMapViewport } from "./RoofMapViewport";
+import { MapZoomControls } from "./MapZoomControls";
+import { RoofSubdivisions } from "./RoofSubdivisions";
+import { RoofPreviewSummary } from "./RoofPreviewSummary";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type {
   AppConfig,
   Project,
   RoofPlane,
+  RoofSlopeLine,
   ScenarioResult,
   SeoPage,
 } from "../types";
 import {
-  packPanels,
-  roofAlignmentAngle,
+  autoLayoutPlane,
+  panelFootprint,
   updatePlaneArea,
 } from "../engines/roof";
 import { runSimulation } from "../engines/optimizer";
@@ -31,7 +36,6 @@ const steps = [
   "Home",
   "Trova casa",
   "Tetto",
-  "Pannelli",
   "Consumi",
   "Casa futura",
   "Mobilità",
@@ -42,7 +46,6 @@ const stepRoutes = [
   "/",
   "/trova-casa",
   "/tetto",
-  "/pannelli",
   "/consumi",
   "/casa-futura",
   "/mobilita",
@@ -91,6 +94,7 @@ function zoomMapToMaximum(
 function pathToStep(pathname: string) {
   const normalized =
     pathname.length > 1 ? pathname.replace(/\/$/, "") : pathname;
+  if (normalized === "/pannelli") return 2;
   const index = stepRoutes.indexOf(normalized);
   return index >= 0 ? index : 0;
 }
@@ -167,7 +171,14 @@ export function App({ config }: { config: AppConfig }) {
     saveDraftProject(project);
   }, [project]);
   useEffect(() => {
-    const onPopState = () => setStep(pathToStep(window.location.pathname));
+    const onPopState = () => {
+      const nextStep = pathToStep(window.location.pathname);
+      if (/^\/pannelli\/?$/.test(window.location.pathname)) {
+        window.history.replaceState(window.history.state, "", `/tetto${window.location.search}${window.location.hash}`);
+      }
+      setStep(nextStep);
+    };
+    onPopState();
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
@@ -190,8 +201,11 @@ export function App({ config }: { config: AppConfig }) {
     setMessage("Progetto salvato localmente.");
   }
   function simulate() {
-    update((p) => ({ ...p, results: runSimulation(p, config) }));
-    navigateStep(8);
+    update((p) => {
+      const current = { ...p, roof: { ...p.roof, planes: p.roof.planes.map((plane) => autoLayoutPlane(plane, config)) } };
+      return { ...current, results: runSimulation(current, config) };
+    });
+    navigateStep(7);
   }
 
   return (
@@ -204,7 +218,7 @@ export function App({ config }: { config: AppConfig }) {
       />
       <main
         className={
-          step === 0 || step === 1 || step === 2 || step === 3 || step === 5
+          step === 0 || step === 1 || step === 2 || step === 4
             ? "mock-main"
             : ""
         }
@@ -223,7 +237,7 @@ export function App({ config }: { config: AppConfig }) {
             onLoad={(p: Project) => {
               setProject(p);
               setHeaderAddress(p.location?.address ?? "");
-              navigateStep(8);
+              navigateStep(7);
             }}
             config={config}
           />
@@ -245,22 +259,13 @@ export function App({ config }: { config: AppConfig }) {
             onConfirm={() => navigateStep(3)}
           />
         )}
-        {step === 3 && (
-          <PanelsStep
-            project={project}
-            update={update}
-            config={config}
-            onBack={() => navigateStep(2)}
-            onNext={() => navigateStep(4)}
-          />
-        )}
-        {step === 4 && <ConsumptionStep project={project} update={update} />}
-        {step === 5 && <FutureStep project={project} update={update} />}
-        {step === 6 && <MobilityStep project={project} update={update} />}
-        {step === 7 && (
+        {step === 3 && <ConsumptionStep project={project} update={update} />}
+        {step === 4 && <FutureStep project={project} update={update} />}
+        {step === 5 && <MobilityStep project={project} update={update} />}
+        {step === 6 && (
           <TariffsStep project={project} update={update} config={config} />
         )}
-        {step === 8 && (
+        {step === 7 && (
           <ResultsStep
             project={project}
             update={update}
@@ -269,7 +274,7 @@ export function App({ config }: { config: AppConfig }) {
             simulate={simulate}
           />
         )}
-        {step !== 0 && step !== 1 && step !== 2 && step !== 3 && step !== 5 && (
+        {step !== 0 && step !== 1 && step !== 2 && step !== 4 && (
           <div className="actions">
             <button
               type="button"
@@ -286,7 +291,7 @@ export function App({ config }: { config: AppConfig }) {
             </button>
             <button
               type="button"
-              disabled={step >= 8}
+              disabled={step >= stepRoutes.length - 1}
               onClick={() => navigateStep(step + 1)}
             >
               Avanti
@@ -335,7 +340,7 @@ function Header({
         </nav>
       ) : (
         <nav className="cw-stepper" aria-label="Step di configurazione">
-          {steps.slice(1, 8).map((s, i) => (
+          {steps.slice(1, -1).map((s, i) => (
             <button
               type="button"
               key={s}
@@ -994,7 +999,7 @@ function rebuildPlaneFromMapPolygon(
         }))
       : plane.obstacles,
   });
-  nextPlane = { ...nextPlane, panels: packPanels(nextPlane, config) };
+  nextPlane = autoLayoutPlane(nextPlane, config);
   return nextPlane;
 }
 
@@ -1010,14 +1015,15 @@ function mapVertexIcon(
   selected: boolean,
   fillColor: string,
   strokeColor: string,
+  magnification = 1,
 ) {
   return {
     path: google.maps.SymbolPath.CIRCLE,
-    scale: selected ? 9 : 6,
+    scale: (selected ? 9 : 6) / magnification,
     fillColor: selected ? "#e11d48" : fillColor,
     fillOpacity: 1,
     strokeColor: selected ? "#ffffff" : strokeColor,
-    strokeWeight: selected ? 4 : 2,
+    strokeWeight: (selected ? 4 : 2) / magnification,
   };
 }
 
@@ -1042,7 +1048,7 @@ function useDeleteSelectedVertex(enabled: boolean, onDelete: () => void) {
   }, [enabled, onDelete]);
 }
 
-function RoofStep({
+export function RoofStep({
   project,
   update,
   config,
@@ -1051,10 +1057,15 @@ function RoofStep({
   const cfg = config!;
   const roofMapCanvasRef = useRef<HTMLDivElement | null>(null);
   const roofMapRef = useRef<any>(null);
+  const magnification = project.roof.mapMagnification ?? 2;
   const drawingRef = useRef(false);
+  const drawingSlopeRef = useRef(false);
   const overlaysRef = useRef<any[]>([]);
   const [mapReady, setMapReady] = useState(false);
+  const [preview, setPreview] = useState(false);
+  const layoutSourceRef = useRef<{ id: string; config: AppConfig } | null>(null);
   const [drawing, setDrawing] = useState(false);
+  const [draftPlaneName, setDraftPlaneName] = useState("");
   const [draftPoints, setDraftPoints] = useState<
     Array<{ lat: number; lng: number }>
   >([]);
@@ -1063,11 +1074,47 @@ function RoofStep({
   );
   const [selectedVertex, setSelectedVertex] =
     useState<MapVertexSelection | null>(null);
+  const [pitchOpen, setPitchOpen] = useState(false);
+  const [obstaclesOpen, setObstaclesOpen] = useState(false);
+  const [drawingObstacle, setDrawingObstacle] = useState(false);
+  const [obstaclePlaneId, setObstaclePlaneId] = useState("");
+  const [obstacleType, setObstacleType] = useState("Comignolo");
+  const [subdivisionsOpen, setSubdivisionsOpen] = useState(false);
+  const [drawingSlope, setDrawingSlope] = useState(false);
+  const [slopePlaneId, setSlopePlaneId] = useState("");
   const drawnPlanes = project.roof.planes.filter(
     (plane) => (plane.mapPolygon?.length ?? 0) >= 3,
   );
 
-  drawingRef.current = drawing;
+  // Recompute legacy/imported layouts once per project/config with the current
+  // projection and automatic orientation, without repacking on every keystroke.
+  useEffect(() => {
+    if (layoutSourceRef.current?.id === project.id && layoutSourceRef.current.config === cfg) return;
+    layoutSourceRef.current = { id: project.id, config: cfg };
+    update((p) => ({ ...p, roof: { ...p.roof, planes: p.roof.planes.map((plane) => autoLayoutPlane(plane, cfg)) } }));
+  }, [project.id, cfg, update]);
+
+  const obstaclePlanes = drawnPlanes.filter((plane) => plane.usable);
+  const activeObstaclePlane =
+    obstaclePlanes.find((plane) => plane.id === obstaclePlaneId) ??
+    obstaclePlanes[0];
+  const hasSavedObstacles = Boolean(activeObstaclePlane?.obstacles?.length);
+
+  useEffect(() => {
+    if (drawingObstacle) setDraftPoints([]);
+    setSelectedVertex(null);
+    setDrawingObstacle(false);
+  }, [activeObstaclePlane?.id]);
+
+  const activeSlopePlane = drawnPlanes.find((plane) => plane.id === slopePlaneId) ?? drawnPlanes[0];
+  useEffect(() => {
+    if (drawingSlope) setDraftPoints([]);
+    setDrawingSlope(false);
+    setSelectedVertex(null);
+  }, [activeSlopePlane?.id]);
+
+  drawingRef.current = drawing || drawingObstacle || drawingSlope;
+  drawingSlopeRef.current = drawingSlope;
   useDeleteSelectedVertex(Boolean(selectedVertex), deleteSelectedRoofVertex);
 
   useEffect(() => {
@@ -1094,6 +1141,7 @@ function RoofStep({
           tilt: 0,
           heading: 0,
           ...googleMapControlOptions(google),
+          zoomControl: false,
           draggable: false,
           scrollwheel: false,
           keyboardShortcuts: false,
@@ -1107,10 +1155,10 @@ function RoofStep({
         });
         clickListener = map.addListener("click", (event: any) => {
           if (!drawingRef.current || !event.latLng) return;
-          setDraftPoints((points) => [
-            ...points,
-            { lat: event.latLng.lat(), lng: event.latLng.lng() },
-          ]);
+          setDraftPoints((points) => drawingSlopeRef.current && points.length >= 2
+            ? points
+            : [...points, { lat: event.latLng.lat(), lng: event.latLng.lng() }],
+          );
         });
         setMapReady(true);
       })
@@ -1141,14 +1189,93 @@ function RoofStep({
         map,
         paths: plane.mapPolygon,
         clickable: false,
-        strokeColor: "#ffca28",
+        strokeColor: plane.usable ? "#ffca28" : "#94a3b8",
         strokeOpacity: 1,
-        strokeWeight: 3,
+        strokeWeight: 3 / magnification,
         fillColor: "#ffca28",
-        fillOpacity: 0.28,
+        fillOpacity: preview ? 0.08 : 0.28,
       });
       overlaysRef.current.push(polygon);
-      plane.mapPolygon?.forEach((point, pointIndex) => {
+      (plane.slopeLines ?? []).forEach((line) => {
+        overlaysRef.current.push(new google.maps.Polyline({
+          map,
+          path: line.points,
+          clickable: false,
+          strokeColor: "#7dd3fc",
+          strokeOpacity: 1,
+          strokeWeight: 4 / magnification,
+        }));
+      });
+      if (preview && plane.usable && plane.mapPolygon?.[0]) {
+        plane.panels.forEach((panel) => {
+          overlaysRef.current.push(new google.maps.Polygon({
+            map,
+            paths: panelFootprint(plane, panel, cfg).map((point) => metricPointToMap(point, plane.mapPolygon![0])),
+            clickable: false,
+            strokeColor: "#d9f4ff",
+            strokeOpacity: 1,
+            strokeWeight: 1 / magnification,
+            fillColor: "#1570a6",
+            fillOpacity: 0.85,
+          }));
+        });
+      }
+      (plane.obstacles ?? []).forEach((obstacle) => {
+        overlaysRef.current.push(
+          new google.maps.Polygon({
+            map,
+            paths: obstacle.mapPolygon,
+            clickable: false,
+            strokeColor: "#ff4d4f",
+            strokeWeight: 3 / magnification,
+            fillColor: "#ff4d4f",
+            fillOpacity: 0.42,
+          }),
+        );
+        // Existing geometry stays editable independently of the creation form.
+        if (preview) return;
+        obstacle.mapPolygon.forEach((point, pointIndex) => {
+          const marker = new google.maps.Marker({
+            map,
+            position: point,
+            draggable: true,
+            cursor: "grab",
+            title: `Seleziona il punto ${pointIndex + 1} di ${obstacle.label}`,
+            icon: mapVertexIcon(
+              google,
+              selectedVertex?.source === "saved" &&
+                selectedVertex.planeId === plane.id &&
+                selectedVertex.obstacleId === obstacle.id &&
+                selectedVertex.pointIndex === pointIndex,
+              "#ff4d4f",
+              "#ffffff",
+              magnification,
+            ),
+          });
+          marker.addListener("click", () => {
+            setSelectedVertex({
+              source: "saved",
+              planeId: plane.id,
+              obstacleId: obstacle.id,
+              pointIndex,
+            });
+            setDrawingStatus(
+              "Punto ostacolo selezionato. Premi Canc o Backspace per rimuoverlo.",
+            );
+          });
+          marker.addListener("dragend", (event: any) => {
+            if (!event.latLng) return;
+            const moved = { lat: event.latLng.lat(), lng: event.latLng.lng() };
+            changeObstacle(plane.id, obstacle.id, (points) =>
+              points.map((value, index) =>
+                index === pointIndex ? moved : value,
+              ),
+            );
+          });
+          overlaysRef.current.push(marker);
+        });
+      });
+      if (!preview) plane.mapPolygon?.forEach((point, pointIndex) => {
         const marker = new google.maps.Marker({
           map,
           position: point,
@@ -1160,9 +1287,11 @@ function RoofStep({
             google,
             selectedVertex?.source === "saved" &&
               selectedVertex.planeId === plane.id &&
+              !selectedVertex.obstacleId &&
               selectedVertex.pointIndex === pointIndex,
             "#ffca28",
             "#ffffff",
+            magnification,
           ),
         });
         marker.addListener("dragend", (event: any) => {
@@ -1210,15 +1339,16 @@ function RoofStep({
     });
 
     if (draftPoints.length > 0) {
-      const draft = new google.maps.Polygon({
+      const DraftOverlay = drawingSlope ? google.maps.Polyline : google.maps.Polygon;
+      const draft = new DraftOverlay({
         map,
-        paths: draftPoints,
+        ...(drawingSlope ? { path: draftPoints } : { paths: draftPoints }),
         clickable: false,
-        strokeColor: "#ffffff",
+        strokeColor: drawingSlope ? "#7dd3fc" : drawingObstacle ? "#ff4d4f" : "#ffffff",
         strokeOpacity: 1,
-        strokeWeight: 3,
-        fillColor: "#0f766e",
-        fillOpacity: draftPoints.length >= 3 ? 0.3 : 0,
+        strokeWeight: 3 / magnification,
+        fillColor: drawingObstacle ? "#ff4d4f" : "#0f766e",
+        fillOpacity: !drawingSlope && draftPoints.length >= 3 ? 0.3 : 0,
       });
       overlaysRef.current.push(draft);
       draftPoints.forEach((point, pointIndex) => {
@@ -1228,13 +1358,16 @@ function RoofStep({
           clickable: true,
           draggable: true,
           cursor: "grab",
-          title: `Trascina per spostare o fai clic per rimuovere il punto ${pointIndex + 1}`,
+          title: drawingSlope
+            ? `Trascina per spostare il punto ${pointIndex + 1} della separazione`
+            : `Trascina per spostare o fai clic per rimuovere il punto ${pointIndex + 1}`,
           icon: mapVertexIcon(
             google,
             selectedVertex?.source === "draft" &&
               selectedVertex.pointIndex === pointIndex,
             "#ffffff",
-            "#0f766e",
+            drawingSlope ? "#0284c7" : drawingObstacle ? "#ff4d4f" : "#0f766e",
+            magnification,
           ),
         });
         marker.addListener("dragend", (event: any) => {
@@ -1263,7 +1396,151 @@ function RoofStep({
       overlaysRef.current.forEach((overlay) => overlay.setMap(null));
       overlaysRef.current = [];
     };
-  }, [draftPoints, drawnPlanes, mapReady, selectedVertex]);
+  }, [
+    draftPoints,
+    drawnPlanes,
+    mapReady,
+    selectedVertex,
+    obstaclesOpen,
+    drawing,
+    drawingObstacle,
+    drawingSlope,
+    magnification,
+    preview,
+    cfg,
+  ]);
+
+  function changeObstacle(
+    planeId: string,
+    obstacleId: string,
+    transform: (
+      points: Array<{ lat: number; lng: number }>,
+    ) => Array<{ lat: number; lng: number }>,
+  ) {
+    update((p) => ({
+      ...p,
+      roof: {
+        ...p.roof,
+        confirmedByUser: false,
+        planes: p.roof.planes.map((plane) => {
+          if (plane.id !== planeId || !plane.mapPolygon?.[0]) return plane;
+          const nextPlane = {
+            ...plane,
+            obstacles: (plane.obstacles ?? []).map((obstacle) => {
+              if (obstacle.id !== obstacleId) return obstacle;
+              const mapPolygon = transform(obstacle.mapPolygon);
+              return {
+                ...obstacle,
+                mapPolygon,
+                polygon: mapPointsToMetric(mapPolygon, plane.mapPolygon![0]),
+              };
+            }),
+          };
+          return autoLayoutPlane(nextPlane, cfg);
+        }),
+      },
+    }));
+  }
+
+  function changeSlopeLines(transform: (lines: RoofSlopeLine[]) => RoofSlopeLine[]) {
+    if (!activeSlopePlane) return;
+    update((p) => ({
+      ...p,
+      roof: {
+        ...p.roof,
+        confirmedByUser: false,
+        planes: p.roof.planes.map((plane) => {
+          if (plane.id !== activeSlopePlane.id) return plane;
+          const nextPlane = { ...plane, slopeLines: transform(plane.slopeLines ?? []) };
+          return autoLayoutPlane(nextPlane, cfg);
+        }),
+      },
+    }));
+  }
+
+  function cancelSlopeDrawing() {
+    if (drawingSlope) {
+      setDraftPoints([]);
+      setDrawingStatus("Separazione annullata. Puoi modificare o confermare le falde.");
+    }
+    setDrawingSlope(false);
+    setSelectedVertex(null);
+  }
+
+  function completeSlopeLine() {
+    if (!activeSlopePlane || draftPoints.length !== 2) return;
+    const slopeLine: RoofSlopeLine = {
+      id: newId("slope"),
+      label: `Separazione falda ${(activeSlopePlane.slopeLines?.length ?? 0) + 1}`,
+      points: [draftPoints[0], draftPoints[1]],
+    };
+    changeSlopeLines((lines) => [...lines, slopeLine]);
+    setDrawingSlope(false);
+    setDraftPoints([]);
+    setSelectedVertex(null);
+    setDrawingStatus("Separazione interna salvata. Puoi confermare le superfici.");
+  }
+
+  function closeObstacles() {
+    setObstaclesOpen(false);
+    setDrawingObstacle(false);
+    if (drawingObstacle) setDraftPoints([]);
+    setSelectedVertex(null);
+  }
+
+  function completeObstacle() {
+    if (!activeObstaclePlane?.mapPolygon?.[0] || draftPoints.length < 3) return;
+    const obstacle = {
+      id: newId("obstacle"),
+      label: `${obstacleType} ${(activeObstaclePlane.obstacles?.length ?? 0) + 1}`,
+      mapPolygon: draftPoints,
+      polygon: mapPointsToMetric(
+        draftPoints,
+        activeObstaclePlane.mapPolygon[0],
+      ),
+    };
+    update((p) => ({
+      ...p,
+      roof: {
+        ...p.roof,
+        confirmedByUser: false,
+        planes: p.roof.planes.map((plane) => {
+          if (plane.id !== activeObstaclePlane.id) return plane;
+          const nextPlane = {
+            ...plane,
+            obstacles: [...(plane.obstacles ?? []), obstacle],
+          };
+          return autoLayoutPlane(nextPlane, cfg);
+        }),
+      },
+    }));
+    setDrawingObstacle(false);
+    setDraftPoints([]);
+    setSelectedVertex(null);
+    setDrawingStatus("Ostacolo salvato: pannelli ridisposti automaticamente.");
+  }
+
+  function deleteObstacle(obstacleId: string) {
+    if (!activeObstaclePlane) return;
+    setSelectedVertex(null);
+    update((p) => ({
+      ...p,
+      roof: {
+        ...p.roof,
+        confirmedByUser: false,
+        planes: p.roof.planes.map((plane) => {
+          if (plane.id !== activeObstaclePlane.id) return plane;
+          const nextPlane = {
+            ...plane,
+            obstacles: (plane.obstacles ?? []).filter(
+              (item) => item.id !== obstacleId,
+            ),
+          };
+          return autoLayoutPlane(nextPlane, cfg);
+        }),
+      },
+    }));
+  }
 
   function deleteSelectedRoofVertex() {
     if (!selectedVertex) return;
@@ -1279,6 +1556,23 @@ function RoofStep({
     const selectedPlane = project.roof.planes.find(
       (plane) => plane.id === selectedVertex.planeId,
     );
+    if (selectedVertex.obstacleId) {
+      if (!selectedPlane) return;
+      const obstacle = selectedPlane.obstacles?.find(
+        (item) => item.id === selectedVertex.obstacleId,
+      );
+      if (!obstacle || obstacle.mapPolygon.length <= 3) {
+        setDrawingStatus(
+          "Un ostacolo deve avere almeno 3 punti. Sposta il punto o elimina l’intero ostacolo.",
+        );
+        return;
+      }
+      changeObstacle(selectedPlane.id, obstacle.id, (points) =>
+        points.filter((_, index) => index !== selectedVertex.pointIndex),
+      );
+      setSelectedVertex(null);
+      return;
+    }
     if ((selectedPlane?.mapPolygon?.length ?? 0) <= 3) {
       setDrawingStatus(
         "Una falda deve avere almeno 3 punti. Sposta il punto oppure elimina l’intera falda.",
@@ -1309,13 +1603,29 @@ function RoofStep({
       ...p,
       roof: {
         ...p.roof,
-        planes: p.roof.planes.map((plane) =>
-          plane.id === id ? updatePlaneArea({ ...plane, ...patch }) : plane,
-        ),
+        confirmedByUser: false,
+        planes: p.roof.planes.map((plane) => {
+          if (plane.id !== id) return plane;
+          const nextPlane = updatePlaneArea({ ...plane, ...patch });
+          return autoLayoutPlane(nextPlane, cfg);
+        }),
       },
     }));
 
+  function renameRoofPlane(id: string, label: string) {
+    update((p) => ({
+      ...p,
+      roof: {
+        ...p.roof,
+        planes: p.roof.planes.map((plane) => plane.id === id ? { ...plane, label } : plane),
+      },
+    }));
+  }
+
   function startDrawing() {
+    setDraftPlaneName(`Falda ${drawnPlanes.length + 1}`);
+    setDrawingSlope(false);
+    setDrawingObstacle(false);
     setDraftPoints([]);
     setSelectedVertex(null);
     setDrawing(true);
@@ -1325,6 +1635,7 @@ function RoofStep({
   }
 
   function cancelDrawing() {
+    setDraftPlaneName("");
     setDraftPoints([]);
     setSelectedVertex(null);
     setDrawing(false);
@@ -1332,6 +1643,11 @@ function RoofStep({
   }
 
   function completeDrawing() {
+    const label = draftPlaneName.trim();
+    if (!label) {
+      setDrawingStatus("Inserisci il nome della falda prima di salvarla.");
+      return;
+    }
     if (draftPoints.length < 3) {
       setDrawingStatus("Aggiungi almeno 3 punti per chiudere la falda.");
       return;
@@ -1339,7 +1655,7 @@ function RoofStep({
 
     let plane = updatePlaneArea({
       id: newId("plane"),
-      label: `Falda ${drawnPlanes.length + 1}`,
+      label,
       polygon: mapPolygonToMetric(draftPoints),
       mapPolygon: draftPoints,
       areaM2: 0,
@@ -1350,7 +1666,7 @@ function RoofStep({
       layoutOrientation: "portrait",
       panels: [],
     });
-    plane = { ...plane, panels: packPanels(plane, cfg) };
+    plane = autoLayoutPlane(plane, cfg);
 
     update((p) => ({
       ...p,
@@ -1367,12 +1683,22 @@ function RoofStep({
     setDraftPoints([]);
     setSelectedVertex(null);
     setDrawing(false);
+    setDraftPlaneName("");
     setDrawingStatus(
-      "Falda salvata. Disegnane un’altra oppure conferma le falde selezionate.",
+      "Falda salvata. Disegnane un’altra oppure visualizza la disposizione automatica.",
     );
   }
 
   function deletePlane(id: string) {
+    setSelectedVertex(null);
+    if (id === activeSlopePlane?.id) {
+      setDrawingSlope(false);
+      if (drawingSlope) setDraftPoints([]);
+    }
+    if (id === activeObstaclePlane?.id) {
+      setDrawingObstacle(false);
+      if (drawingObstacle) setDraftPoints([]);
+    }
     update((p) => ({
       ...p,
       roof: {
@@ -1391,9 +1717,24 @@ function RoofStep({
     <section className="location-page roof-page">
       <div className="map-workspace">
         <div className="google-map-shell roof-drawing-step roof-map-shell">
-          <div
-            className="google-map-canvas roof-map-canvas"
-            ref={roofMapCanvasRef}
+          <RoofMapViewport
+            canvasRef={roofMapCanvasRef}
+            mapRef={roofMapRef}
+            overlaysRef={overlaysRef}
+            ready={mapReady}
+            magnification={magnification}
+          />
+          <MapZoomControls
+            magnification={magnification}
+            ready={mapReady}
+            showVertexHint={!preview}
+            onChange={(mapMagnification) => update((p) => ({
+              ...p, roof: { ...p.roof, mapMagnification },
+            }))}
+            onRecenter={() => project.location && roofMapRef.current?.setCenter({
+              lat: project.location.latitude,
+              lng: project.location.longitude,
+            })}
           />
           <button
             type="button"
@@ -1408,11 +1749,49 @@ function RoofStep({
           </button>
 
           <aside className="glass-card map-overlay-panel roof-panel roof-drawing-panel">
-            <h2>Falde disponibili</h2>
+            {preview ? (
+              <RoofPreviewSummary
+                planes={drawnPlanes}
+                config={cfg}
+                onEdit={() => setPreview(false)}
+                onConfirm={() => {
+                  update((p) => ({ ...p, roof: { ...p.roof, confirmedByUser: true } }));
+                  onConfirm();
+                }}
+              />
+            ) : (
+              <>
+            <div className="roof-manager-heading">
+              <h2>Falde disponibili</h2>
+              {!drawing && drawnPlanes.length > 0 && (
+                <button
+                  type="button"
+                  className="primary roof-add-plane-icon"
+                  aria-label="Disegna un’altra falda"
+                  title="Disegna un’altra falda"
+                  onClick={startDrawing}
+                  disabled={!mapReady || drawingObstacle || drawingSlope}
+                >
+                  <Plus size={20} aria-hidden="true" />
+                </button>
+              )}
+            </div>
             <p>{drawingStatus}</p>
 
             {drawing ? (
               <div className="roof-drawing-actions">
+                <label className="roof-plane-name-field" htmlFor="roof-draft-plane-name">
+                  Nome della falda
+                  <input
+                    id="roof-draft-plane-name"
+                    type="text"
+                    value={draftPlaneName}
+                    onChange={(event) => setDraftPlaneName(event.target.value)}
+                    placeholder="Es. Falda sud"
+                    maxLength={80}
+                    required
+                  />
+                </label>
                 <strong>{draftPoints.length} punti inseriti</strong>
                 <button
                   type="button"
@@ -1427,7 +1806,7 @@ function RoofStep({
                   type="button"
                   className="yellow"
                   onClick={completeDrawing}
-                  disabled={draftPoints.length < 3}
+                  disabled={draftPoints.length < 3 || !draftPlaneName.trim()}
                 >
                   Completa falda
                 </button>
@@ -1439,17 +1818,16 @@ function RoofStep({
                   Annulla disegno
                 </button>
               </div>
-            ) : (
+            ) : drawnPlanes.length === 0 ? (
               <button
                 type="button"
                 className="primary roof-draw-start"
                 onClick={startDrawing}
-                disabled={!mapReady}
+                disabled={!mapReady || drawingObstacle || drawingSlope}
               >
-                + Disegna{" "}
-                {drawnPlanes.length ? "un’altra falda" : "la prima falda"}
+                + Disegna la prima falda
               </button>
-            )}
+            ) : null}
 
             <div className="roof-area-list">
               {drawnPlanes.length === 0 ? (
@@ -1457,7 +1835,7 @@ function RoofStep({
                   Nessuna falda ancora disegnata.
                 </p>
               ) : (
-                drawnPlanes.map((plane) => (
+                drawnPlanes.map((plane, planeIndex) => (
                   <div className="plane-row" key={plane.id}>
                     <button
                       type="button"
@@ -1468,17 +1846,31 @@ function RoofStep({
                     >
                       {plane.usable ? "✓" : "×"}
                     </button>
-                    <strong>{plane.label}</strong>
-                    <span>
-                      {Math.round(plane.areaM2)} m²
-                      <button
-                        type="button"
-                        className="roof-delete-area"
-                        onClick={() => deletePlane(plane.id)}
-                      >
-                        Elimina
-                      </button>
-                    </span>
+                    <input
+                      className="roof-plane-name"
+                      type="text"
+                      aria-label={`Nome della falda ${planeIndex + 1}`}
+                      value={plane.label}
+                      maxLength={80}
+                      onChange={(event) => renameRoofPlane(plane.id, event.target.value)}
+                      onBlur={(event) => {
+                        const name = event.target.value.trim() || `Falda ${planeIndex + 1}`;
+                        if (name !== plane.label) renameRoofPlane(plane.id, name);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") event.currentTarget.blur();
+                      }}
+                    />
+                    <span className="roof-plane-area">{Math.round(plane.areaM2)} m²</span>
+                    <button
+                      type="button"
+                      className="roof-delete-area"
+                      aria-label={`Elimina ${plane.label}`}
+                      title={`Elimina ${plane.label}`}
+                      onClick={() => deletePlane(plane.id)}
+                    >
+                      <Minus size={18} aria-hidden="true" />
+                    </button>
                   </div>
                 ))
               )}
@@ -1486,40 +1878,9 @@ function RoofStep({
 
             {drawnPlanes.length > 0 && (
               <>
-                <h3>Inclinazione del tetto</h3>
-                <div className="pitch-grid">
-                  {(["flat", "low", "normal", "steep"] as const).map(
-                    (pitch) => (
-                      <button
-                        type="button"
-                        key={pitch}
-                        className={
-                          drawnPlanes[0]?.pitchPreset === pitch
-                            ? "selected"
-                            : ""
-                        }
-                        onClick={() =>
-                          update((p) => ({
-                            ...p,
-                            roof: {
-                              ...p.roof,
-                              planes: p.roof.planes.map((plane) => ({
-                                ...plane,
-                                pitchPreset: pitch,
-                                pitchDeg: cfg.roof.defaultPitchDeg[pitch],
-                              })),
-                            },
-                          }))
-                        }
-                      >
-                        {pitchLabel(pitch)}
-                      </button>
-                    ),
-                  )}
-                </div>
                 <div className="summary-strip">
                   <strong>
-                    {drawnPlanes.length} falde · area totale{" "}
+                    {drawnPlanes.length} falde · area in pianta{" "}
                     {Math.round(
                       drawnPlanes.reduce((sum, plane) => sum + plane.areaM2, 0),
                     )}{" "}
@@ -1532,16 +1893,233 @@ function RoofStep({
                 <button
                   type="button"
                   className="yellow"
+                  disabled={
+                    drawing || drawingObstacle || drawingSlope || draftPoints.length > 0
+                  }
                   onClick={() => {
-                    update((p) => ({
-                      ...p,
-                      roof: { ...p.roof, confirmedByUser: true },
-                    }));
-                    onConfirm();
+                    update((p) => ({ ...p, roof: { ...p.roof, confirmedByUser: false, planes: p.roof.planes.map((plane) => autoLayoutPlane(plane, cfg)) } }));
+                    setSelectedVertex(null);
+                    setPreview(true);
                   }}
                 >
-                  Conferma gli spazi ›
+                  Mostra disposizione automatica
                 </button>
+                <div className="roof-optional-settings">
+                  <p className="roof-optional-caption">Opzioni facoltative</p>
+                  <button
+                    type="button"
+                    id="roof-pitch-toggle"
+                    className="roof-accordion-toggle"
+                    aria-expanded={pitchOpen}
+                    aria-controls="roof-pitch-editor"
+                    onClick={() => setPitchOpen((open) => !open)}
+                  >
+                    Inclinazione del tetto
+                    <ChevronDown size={18} aria-hidden="true" />
+                  </button>
+                  {pitchOpen && (
+                <div
+                  id="roof-pitch-editor"
+                  className="pitch-grid"
+                  role="region"
+                  aria-labelledby="roof-pitch-toggle"
+                >
+                  {(["flat", "low", "normal", "steep"] as const).map(
+                    (pitch) => (
+                      <button
+                        type="button"
+                        key={pitch}
+                        aria-pressed={drawnPlanes[0]?.pitchPreset === pitch}
+                        className={
+                          drawnPlanes[0]?.pitchPreset === pitch
+                            ? "selected"
+                            : ""
+                        }
+                        onClick={() =>
+                          update((p) => ({
+                            ...p,
+                            roof: {
+                              ...p.roof,
+                              confirmedByUser: false,
+                              planes: p.roof.planes.map((plane) => {
+                                const nextPlane = {
+                                  ...plane,
+                                  pitchPreset: pitch,
+                                  pitchDeg: cfg.roof.defaultPitchDeg[pitch],
+                                };
+                                return autoLayoutPlane(nextPlane, cfg);
+                              }),
+                            },
+                          }))
+                        }
+                      >
+                        {pitchLabel(pitch)}
+                      </button>
+                    ),
+                  )}
+                </div>
+                  )}
+                <button
+                  type="button"
+                  id="roof-obstacle-toggle"
+                  className="roof-accordion-toggle"
+                  aria-expanded={obstaclesOpen}
+                  aria-controls="roof-obstacle-editor"
+                  disabled={drawing || drawingSlope}
+                  onClick={() =>
+                    obstaclesOpen ? closeObstacles() : setObstaclesOpen(true)
+                  }
+                >
+                  Ostacoli sul tetto
+                  <ChevronDown size={18} aria-hidden="true" />
+                </button>
+                {obstaclesOpen && (
+                  <div
+                    id="roof-obstacle-editor"
+                    className="roof-obstacle-editor"
+                    role="region"
+                    aria-labelledby="roof-obstacle-toggle"
+                  >
+                    <p>
+                      Disegna le zone non utilizzabili. Trascina i punti o
+                      selezionali e premi Canc per correggerli.
+                    </p>
+                    <label>
+                      Falda dell’ostacolo
+                      <select
+                        value={activeObstaclePlane?.id ?? ""}
+                        disabled={drawing || drawingSlope || !activeObstaclePlane}
+                        onChange={(event) => {
+                          setObstaclePlaneId(event.target.value);
+                          setDrawingObstacle(false);
+                          setDraftPoints([]);
+                          setSelectedVertex(null);
+                        }}
+                      >
+                        {obstaclePlanes.map((plane) => (
+                          <option key={plane.id} value={plane.id}>
+                            {plane.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className={`roof-obstacle-toolbar ${hasSavedObstacles && !drawingObstacle ? "has-items" : ""}`}>
+                      <label>
+                        Tipo di ostacolo
+                        <select
+                          value={obstacleType}
+                          onChange={(event) => setObstacleType(event.target.value)}
+                        >
+                          <option>Comignolo</option>
+                          <option>Finestra</option>
+                          <option>Lucernario</option>
+                          <option>Altro ostacolo</option>
+                        </select>
+                      </label>
+                      {!drawingObstacle && (
+                        <button
+                          type="button"
+                          className={hasSavedObstacles ? "primary roof-add-plane-icon" : "primary"}
+                          aria-label={hasSavedObstacles ? "Disegna un altro ostacolo" : undefined}
+                          title={hasSavedObstacles ? "Disegna un altro ostacolo" : undefined}
+                          disabled={!mapReady || drawing || drawingSlope || !activeObstaclePlane}
+                          onClick={() => {
+                            setDrawing(false);
+                            setDrawingObstacle(true);
+                            setDraftPoints([]);
+                            setSelectedVertex(null);
+                            setDrawingStatus("Fai clic sugli angoli dell’ostacolo, poi completa il perimetro.");
+                          }}
+                        >
+                          {hasSavedObstacles
+                            ? <Plus size={20} aria-hidden="true" />
+                            : "Disegna ostacolo sulla mappa"}
+                        </button>
+                      )}
+                    </div>
+                    {drawingObstacle && (
+                      <>
+                        <span>{draftPoints.length} punti</span>
+                        <button
+                          type="button"
+                          className="yellow"
+                          disabled={draftPoints.length < 3}
+                          onClick={completeObstacle}
+                        >
+                          Completa ostacolo
+                        </button>
+                        <button
+                          type="button"
+                          className="outline"
+                          onClick={() => {
+                            setDrawingObstacle(false);
+                            setDraftPoints([]);
+                            setSelectedVertex(null);
+                          }}
+                        >
+                          Annulla ostacolo
+                        </button>
+                      </>
+                    )}
+                    {(activeObstaclePlane?.obstacles ?? []).map((obstacle) => (
+                      <div className="roof-obstacle-row" key={obstacle.id}>
+                        <span>{obstacle.label}</span>
+                        <button
+                          type="button"
+                          className="roof-remove-item-icon"
+                          aria-label={`Elimina ${obstacle.label}`}
+                          title={`Elimina ${obstacle.label}`}
+                          disabled={drawing || drawingSlope}
+                          onClick={() => deleteObstacle(obstacle.id)}
+                        >
+                          <Minus size={18} aria-hidden="true" />
+                        </button>
+                      </div>
+                    ))}
+                    {!activeObstaclePlane && (
+                      <p>
+                        Includi almeno una falda disegnata per aggiungere
+                        ostacoli.
+                      </p>
+                    )}
+                    <button
+                      type="button"
+                      className="outline"
+                      onClick={closeObstacles}
+                    >
+                      Richiudi ostacoli
+                    </button>
+                  </div>
+                )}
+                  <RoofSubdivisions
+                    planes={drawnPlanes}
+                    activePlane={activeSlopePlane}
+                    open={subdivisionsOpen}
+                    drawing={drawingSlope}
+                    busy={drawing || drawingObstacle}
+                    ready={mapReady}
+                    pointCount={draftPoints.length}
+                    onToggle={() => {
+                      if (subdivisionsOpen) cancelSlopeDrawing();
+                      setSubdivisionsOpen((open) => !open);
+                    }}
+                    onPlaneChange={(id) => {
+                      cancelSlopeDrawing();
+                      setSlopePlaneId(id);
+                    }}
+                    onStart={() => {
+                      setDraftPoints([]);
+                      setSelectedVertex(null);
+                      setDrawingSlope(true);
+                      setDrawingStatus("Fai clic sui due estremi della separazione interna.");
+                    }}
+                    onCancel={cancelSlopeDrawing}
+                    onSave={completeSlopeLine}
+                    onDelete={(id) => changeSlopeLines((lines) => lines.filter((line) => line.id !== id))}
+                  />
+                </div>
+              </>
+            )}
               </>
             )}
           </aside>
@@ -1563,829 +2141,29 @@ function RoofStep({
           automaticamente come informazione durante il wizard.
         </p>
         <ol>
-          <li>Premi “Disegna la prima falda”.</li>
+          <li>Premi “Disegna la prima falda” e inserisci il nome della superficie.</li>
           <li>Fai clic sugli angoli seguendo il perimetro.</li>
           <li>
             Trascina i punti per correggerli. Per rimuoverne uno, selezionalo
             con un clic e premi Canc o Backspace.
           </li>
           <li>Completa la falda e ripeti per ogni falda del tetto.</li>
+          <li>
+            Facoltativamente, apri “Ostacoli sul tetto” per escludere comignoli,
+            finestre o altre zone prima di confermare.
+          </li>
+          <li>
+            Apri “Suddivisioni interne” per indicare le separazioni della falda.
+          </li>
+          <li>
+            Visualizza la disposizione automatica, verifica la capacità stimata e continua ai consumi.
+          </li>
         </ol>
       </div>
 
       <VisualFooter
         left="La mappa resta fissa sul tetto scelto nello step precedente."
-        right="Trascina i punti per correggere le falde disegnate."
-      />
-    </section>
-  );
-}
-
-function PanelsStep({
-  project,
-  update,
-  config,
-  onBack,
-  onNext,
-}: StepProps & { onBack: () => void; onNext: () => void }) {
-  const cfg = config!;
-  const panelMapCanvasRef = useRef<HTMLDivElement | null>(null);
-  const panelMapRef = useRef<any>(null);
-  const overlaysRef = useRef<any[]>([]);
-  const didInitialPanelPackingRef = useRef(false);
-  const modeRef = useRef<"idle" | "obstacle" | "slope">("idle");
-  const drawablePlanes = project.roof.planes.filter(
-    (plane) => (plane.mapPolygon?.length ?? 0) >= 3,
-  );
-  const [activePlaneId, setActivePlaneId] = useState(
-    drawablePlanes[0]?.id ?? "",
-  );
-  const [mapReady, setMapReady] = useState(false);
-  const [mode, setMode] = useState<"idle" | "obstacle" | "slope">("idle");
-  const [draftPoints, setDraftPoints] = useState<
-    Array<{ lat: number; lng: number }>
-  >([]);
-  const [obstacleType, setObstacleType] = useState("Comignolo");
-  const [selectedVertex, setSelectedVertex] =
-    useState<MapVertexSelection | null>(null);
-  const [status, setStatus] = useState(
-    "I pannelli seguono la linea naturale della falda. Scegli l’orientamento per aggiornare la disposizione.",
-  );
-  const activePlane =
-    drawablePlanes.find((plane) => plane.id === activePlaneId) ??
-    drawablePlanes[0];
-
-  modeRef.current = mode;
-  useDeleteSelectedVertex(
-    Boolean(selectedVertex),
-    deleteSelectedObstacleVertex,
-  );
-
-  useEffect(() => {
-    if (didInitialPanelPackingRef.current || drawablePlanes.length === 0)
-      return;
-    didInitialPanelPackingRef.current = true;
-    update((currentProject) => ({
-      ...currentProject,
-      roof: {
-        ...currentProject.roof,
-        planes: currentProject.roof.planes.map((plane) => ({
-          ...plane,
-          panels: packPanels(plane, cfg),
-        })),
-      },
-    }));
-  }, [cfg, drawablePlanes.length, update]);
-
-  useEffect(() => {
-    if (!activePlaneId && drawablePlanes[0])
-      setActivePlaneId(drawablePlanes[0].id);
-  }, [activePlaneId, drawablePlanes]);
-
-  useEffect(() => {
-    const key = googleMapsApiKey(config);
-    if (!key || !project.location || !panelMapCanvasRef.current) {
-      setStatus("Per mostrare i pannelli è necessaria una posizione valida.");
-      return;
-    }
-
-    let cancelled = false;
-    let clickListener: { remove: () => void } | undefined;
-    void loadGoogleMapsScript(key)
-      .then((google) => {
-        if (cancelled || !panelMapCanvasRef.current || !project.location)
-          return;
-        const map = new google.maps.Map(panelMapCanvasRef.current, {
-          center: {
-            lat: project.location.latitude,
-            lng: project.location.longitude,
-          },
-          zoom: MAX_SATELLITE_ZOOM_FALLBACK,
-          mapTypeId: "satellite",
-          tilt: 0,
-          heading: 0,
-          ...googleMapControlOptions(google),
-          draggable: false,
-          scrollwheel: false,
-          keyboardShortcuts: false,
-          gestureHandling: "none",
-          disableDoubleClickZoom: true,
-        });
-        panelMapRef.current = map;
-        zoomMapToMaximum(google, map, {
-          lat: project.location.latitude,
-          lng: project.location.longitude,
-        });
-        clickListener = map.addListener("click", (event: any) => {
-          if (modeRef.current === "idle" || !event.latLng) return;
-          setDraftPoints((points) => {
-            if (modeRef.current === "slope" && points.length >= 2)
-              return points;
-            return [
-              ...points,
-              { lat: event.latLng.lat(), lng: event.latLng.lng() },
-            ];
-          });
-        });
-        setMapReady(true);
-      })
-      .catch(() => setStatus("Non riesco a caricare la vista satellitare."));
-
-    return () => {
-      cancelled = true;
-      clickListener?.remove();
-      panelMapRef.current = null;
-      setMapReady(false);
-    };
-  }, [config, project.location?.latitude, project.location?.longitude]);
-
-  useEffect(() => {
-    const google = (window as any).google;
-    const map = panelMapRef.current;
-    if (!mapReady || !google?.maps || !map) return;
-
-    overlaysRef.current.forEach((overlay) => overlay.setMap(null));
-    overlaysRef.current = [];
-
-    drawablePlanes.forEach((plane) => {
-      if (!plane.mapPolygon?.[0]) return;
-      const isActive = plane.id === activePlane?.id;
-      const area = new google.maps.Polygon({
-        map,
-        paths: plane.mapPolygon,
-        clickable: false,
-        strokeColor: isActive ? "#ffca28" : "#ffffff",
-        strokeOpacity: 1,
-        strokeWeight: isActive ? 4 : 2,
-        fillColor: "#0f766e",
-        fillOpacity: 0.12,
-      });
-      overlaysRef.current.push(area);
-
-      const labelPoint = plane.mapPolygon.reduce(
-        (sum, point) => ({
-          lat: sum.lat + point.lat,
-          lng: sum.lng + point.lng,
-        }),
-        { lat: 0, lng: 0 },
-      );
-      labelPoint.lat /= plane.mapPolygon.length;
-      labelPoint.lng /= plane.mapPolygon.length;
-      const label = new google.maps.Marker({
-        map,
-        position: labelPoint,
-        clickable: false,
-        icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: 0,
-        },
-        label: {
-          text: plane.label,
-          color: "#ffffff",
-          fontSize: "13px",
-          fontWeight: "700",
-          className: "roof-map-label",
-        },
-      });
-      overlaysRef.current.push(label);
-
-      const width =
-        plane.layoutOrientation === "portrait"
-          ? cfg.pv.panel.widthM
-          : cfg.pv.panel.heightM;
-      const height =
-        plane.layoutOrientation === "portrait"
-          ? cfg.pv.panel.heightM
-          : cfg.pv.panel.widthM;
-      const roofAngle = roofAlignmentAngle(plane);
-      const cosine = Math.cos(roofAngle);
-      const sine = Math.sin(roofAngle);
-      plane.panels.forEach((panel) => {
-        const metricCorners = [
-          { x: -width / 2, y: -height / 2 },
-          { x: width / 2, y: -height / 2 },
-          { x: width / 2, y: height / 2 },
-          { x: -width / 2, y: height / 2 },
-        ].map((corner) => ({
-          x: panel.position.x + corner.x * cosine - corner.y * sine,
-          y: panel.position.y + corner.x * sine + corner.y * cosine,
-        }));
-        const panelPolygon = new google.maps.Polygon({
-          map,
-          paths: metricCorners.map((point) =>
-            metricPointToMap(point, plane.mapPolygon![0]),
-          ),
-          clickable: false,
-          strokeColor: "#d9f4ff",
-          strokeOpacity: 1,
-          strokeWeight: 1,
-          fillColor: "#1570a6",
-          fillOpacity: 0.82,
-        });
-        overlaysRef.current.push(panelPolygon);
-      });
-
-      (plane.obstacles ?? []).forEach((obstacle) => {
-        const obstaclePolygon = new google.maps.Polygon({
-          map,
-          paths: obstacle.mapPolygon,
-          clickable: false,
-          strokeColor: "#ff4d4f",
-          strokeOpacity: 1,
-          strokeWeight: 3,
-          fillColor: "#ff4d4f",
-          fillOpacity: 0.42,
-        });
-        overlaysRef.current.push(obstaclePolygon);
-        obstacle.mapPolygon.forEach((point, pointIndex) => {
-          const marker = new google.maps.Marker({
-            map,
-            position: point,
-            clickable: true,
-            draggable: true,
-            cursor: "grab",
-            title: `Seleziona il punto ${pointIndex + 1} di ${obstacle.label}`,
-            icon: mapVertexIcon(
-              google,
-              selectedVertex?.source === "saved" &&
-                selectedVertex.planeId === plane.id &&
-                selectedVertex.obstacleId === obstacle.id &&
-                selectedVertex.pointIndex === pointIndex,
-              "#ff4d4f",
-              "#ffffff",
-            ),
-          });
-          marker.addListener("click", () => {
-            setSelectedVertex({
-              source: "saved",
-              planeId: plane.id,
-              obstacleId: obstacle.id,
-              pointIndex,
-            });
-            setStatus(
-              `Punto ${pointIndex + 1} di ${obstacle.label} selezionato. Premi Canc o Backspace per rimuoverlo.`,
-            );
-          });
-          marker.addListener("dragend", (event: any) => {
-            if (!event.latLng || !plane.mapPolygon?.[0]) return;
-            const movedPoint = {
-              lat: event.latLng.lat(),
-              lng: event.latLng.lng(),
-            };
-            update((currentProject) => ({
-              ...currentProject,
-              roof: {
-                ...currentProject.roof,
-                planes: currentProject.roof.planes.map((currentPlane) => {
-                  if (
-                    currentPlane.id !== plane.id ||
-                    !currentPlane.mapPolygon?.[0]
-                  )
-                    return currentPlane;
-                  const nextObstacles = (currentPlane.obstacles ?? []).map(
-                    (currentObstacle) => {
-                      if (currentObstacle.id !== obstacle.id)
-                        return currentObstacle;
-                      const mapPolygon = currentObstacle.mapPolygon.map(
-                        (currentPoint, currentIndex) =>
-                          currentIndex === pointIndex
-                            ? movedPoint
-                            : currentPoint,
-                      );
-                      return {
-                        ...currentObstacle,
-                        mapPolygon,
-                        polygon: mapPointsToMetric(
-                          mapPolygon,
-                          currentPlane.mapPolygon![0],
-                        ),
-                      };
-                    },
-                  );
-                  const nextPlane = {
-                    ...currentPlane,
-                    obstacles: nextObstacles,
-                  };
-                  return { ...nextPlane, panels: packPanels(nextPlane, cfg) };
-                }),
-              },
-            }));
-            setStatus(
-              `${obstacle.label} aggiornato: pannelli ridisposti automaticamente.`,
-            );
-          });
-          overlaysRef.current.push(marker);
-        });
-      });
-
-      (plane.slopeLines ?? []).forEach((slopeLine) => {
-        const line = new google.maps.Polyline({
-          map,
-          path: slopeLine.points,
-          clickable: false,
-          strokeColor: "#7dd3fc",
-          strokeOpacity: 1,
-          strokeWeight: 4,
-          icons: [
-            {
-              icon: { path: "M 0,-1 0,1", strokeOpacity: 1, scale: 3 },
-              offset: "0",
-              repeat: "14px",
-            },
-          ],
-        });
-        overlaysRef.current.push(line);
-      });
-    });
-
-    if (draftPoints.length > 0) {
-      const DraftOverlay =
-        mode === "slope" ? google.maps.Polyline : google.maps.Polygon;
-      const draft = new DraftOverlay({
-        map,
-        ...(mode === "slope" ? { path: draftPoints } : { paths: draftPoints }),
-        clickable: false,
-        strokeColor: mode === "obstacle" ? "#ff4d4f" : "#7dd3fc",
-        strokeOpacity: 1,
-        strokeWeight: 3,
-        fillColor: "#ff4d4f",
-        fillOpacity: mode === "obstacle" && draftPoints.length >= 3 ? 0.3 : 0,
-      });
-      overlaysRef.current.push(draft);
-      draftPoints.forEach((point, pointIndex) => {
-        const marker = new google.maps.Marker({
-          map,
-          position: point,
-          draggable: true,
-          cursor: "grab",
-          icon: mapVertexIcon(
-            google,
-            selectedVertex?.source === "draft" &&
-              selectedVertex.pointIndex === pointIndex,
-            "#ffffff",
-            mode === "obstacle" ? "#ff4d4f" : "#0284c7",
-          ),
-        });
-        marker.addListener("dragend", (event: any) => {
-          if (!event.latLng) return;
-          const movedPoint = {
-            lat: event.latLng.lat(),
-            lng: event.latLng.lng(),
-          };
-          setDraftPoints((points) =>
-            points.map((pointValue, index) =>
-              index === pointIndex ? movedPoint : pointValue,
-            ),
-          );
-        });
-        marker.addListener("click", () => {
-          setSelectedVertex({ source: "draft", pointIndex });
-          setStatus(
-            `Punto ${pointIndex + 1} selezionato. Premi Canc o Backspace per rimuoverlo.`,
-          );
-        });
-        overlaysRef.current.push(marker);
-      });
-    }
-
-    return () => {
-      overlaysRef.current.forEach((overlay) => overlay.setMap(null));
-      overlaysRef.current = [];
-    };
-  }, [
-    activePlane?.id,
-    cfg,
-    draftPoints,
-    drawablePlanes,
-    mapReady,
-    mode,
-    selectedVertex,
-  ]);
-
-  function deleteSelectedObstacleVertex() {
-    if (!selectedVertex) return;
-    if (selectedVertex.source === "draft") {
-      setDraftPoints((points) =>
-        points.filter((_, index) => index !== selectedVertex.pointIndex),
-      );
-      setSelectedVertex(null);
-      setStatus("Punto rimosso dal disegno in corso.");
-      return;
-    }
-
-    const selectedPlane = project.roof.planes.find(
-      (plane) => plane.id === selectedVertex.planeId,
-    );
-    const selectedObstacle = selectedPlane?.obstacles?.find(
-      (obstacle) => obstacle.id === selectedVertex.obstacleId,
-    );
-    if ((selectedObstacle?.mapPolygon.length ?? 0) <= 3) {
-      setStatus(
-        "Un ostacolo deve avere almeno 3 punti. Puoi spostare il punto oppure eliminare l’intero ostacolo.",
-      );
-      return;
-    }
-
-    update((currentProject) => ({
-      ...currentProject,
-      roof: {
-        ...currentProject.roof,
-        planes: currentProject.roof.planes.map((plane) => {
-          if (plane.id !== selectedVertex.planeId || !plane.mapPolygon?.[0])
-            return plane;
-          const nextObstacles = (plane.obstacles ?? []).map((obstacle) => {
-            if (obstacle.id !== selectedVertex.obstacleId) return obstacle;
-            const mapPolygon = obstacle.mapPolygon.filter(
-              (_, index) => index !== selectedVertex.pointIndex,
-            );
-            return {
-              ...obstacle,
-              mapPolygon,
-              polygon: mapPointsToMetric(mapPolygon, plane.mapPolygon![0]),
-            };
-          });
-          const nextPlane = { ...plane, obstacles: nextObstacles };
-          return { ...nextPlane, panels: packPanels(nextPlane, cfg) };
-        }),
-      },
-    }));
-    setSelectedVertex(null);
-    setStatus(
-      `Punto rimosso da ${selectedObstacle?.label ?? "ostacolo"}: pannelli aggiornati.`,
-    );
-  }
-
-  function changeOrientation(orientation: "portrait" | "landscape") {
-    if (!activePlane) return;
-    update((currentProject) => ({
-      ...currentProject,
-      roof: {
-        ...currentProject.roof,
-        planes: currentProject.roof.planes.map((plane) => {
-          if (plane.id !== activePlane.id) return plane;
-          const nextPlane = { ...plane, layoutOrientation: orientation };
-          return {
-            ...nextPlane,
-            panels: packPanels(nextPlane, cfg, orientation),
-          };
-        }),
-      },
-    }));
-    setStatus(
-      `Layout ${orientation === "portrait" ? "verticale" : "orizzontale"} applicato: disposizione aggiornata.`,
-    );
-  }
-
-  function startMode(nextMode: "obstacle" | "slope") {
-    setMode(nextMode);
-    setDraftPoints([]);
-    setSelectedVertex(null);
-    setStatus(
-      nextMode === "obstacle"
-        ? "Fai clic sugli angoli dell’ostacolo e poi completa il perimetro."
-        : "Fai clic sui due estremi della linea che separa le falde.",
-    );
-  }
-
-  function cancelMode() {
-    setMode("idle");
-    setDraftPoints([]);
-    setSelectedVertex(null);
-    setStatus("Operazione annullata.");
-  }
-
-  function completeObstacle() {
-    if (!activePlane?.mapPolygon?.[0] || draftPoints.length < 3) return;
-    const obstacle = {
-      id: newId("obstacle"),
-      label: `${obstacleType} ${(activePlane.obstacles?.length ?? 0) + 1}`,
-      mapPolygon: draftPoints,
-      polygon: mapPointsToMetric(draftPoints, activePlane.mapPolygon[0]),
-    };
-    update((currentProject) => ({
-      ...currentProject,
-      roof: {
-        ...currentProject.roof,
-        planes: currentProject.roof.planes.map((plane) => {
-          if (plane.id !== activePlane.id) return plane;
-          const nextPlane = {
-            ...plane,
-            obstacles: [...(plane.obstacles ?? []), obstacle],
-          };
-          return { ...nextPlane, panels: packPanels(nextPlane, cfg) };
-        }),
-      },
-    }));
-    setMode("idle");
-    setDraftPoints([]);
-    setSelectedVertex(null);
-    setStatus(
-      "Ostacolo salvato: i pannelli sono stati ridisposti automaticamente.",
-    );
-  }
-
-  function deleteObstacle(obstacleId: string) {
-    if (!activePlane) return;
-    setSelectedVertex(null);
-    update((currentProject) => ({
-      ...currentProject,
-      roof: {
-        ...currentProject.roof,
-        planes: currentProject.roof.planes.map((plane) => {
-          if (plane.id !== activePlane.id) return plane;
-          const nextPlane = {
-            ...plane,
-            obstacles: (plane.obstacles ?? []).filter(
-              (obstacle) => obstacle.id !== obstacleId,
-            ),
-          };
-          return { ...nextPlane, panels: packPanels(nextPlane, cfg) };
-        }),
-      },
-    }));
-  }
-
-  function completeSlopeLine() {
-    if (!activePlane || draftPoints.length !== 2) return;
-    const slopeLine = {
-      id: newId("slope"),
-      label: `Separazione falda ${(activePlane.slopeLines?.length ?? 0) + 1}`,
-      points: [draftPoints[0], draftPoints[1]] as [
-        { lat: number; lng: number },
-        { lat: number; lng: number },
-      ],
-    };
-    update((currentProject) => ({
-      ...currentProject,
-      roof: {
-        ...currentProject.roof,
-        planes: currentProject.roof.planes.map((plane) => {
-          if (plane.id !== activePlane.id) return plane;
-          const nextPlane = {
-            ...plane,
-            slopeLines: [...(plane.slopeLines ?? []), slopeLine],
-          };
-          return { ...nextPlane, panels: packPanels(nextPlane, cfg) };
-        }),
-      },
-    }));
-    setMode("idle");
-    setDraftPoints([]);
-    setStatus("Linea di separazione delle falde salvata.");
-  }
-
-  function renameActivePlane(label: string) {
-    if (!activePlane) return;
-    update((currentProject) => ({
-      ...currentProject,
-      roof: {
-        ...currentProject.roof,
-        planes: currentProject.roof.planes.map((plane) =>
-          plane.id === activePlane.id ? { ...plane, label } : plane,
-        ),
-      },
-    }));
-  }
-
-  if (!activePlane)
-    return (
-      <section>
-        <h1>Disponi i pannelli</h1>
-        <p>Prima disegna almeno una falda nello step Tetto.</p>
-      </section>
-    );
-
-  return (
-    <section className="location-page panels-page">
-      <div className="map-workspace">
-        <div className="google-map-shell panels-map-shell">
-          <div className="google-map-canvas" ref={panelMapCanvasRef} />
-          <aside className="glass-card map-overlay-panel panels-control-panel">
-            <h2>Disponi i pannelli</h2>
-            <p>{status}</p>
-
-            <label>
-              Falda
-              <select
-                value={activePlane.id}
-                onChange={(event) => {
-                  setActivePlaneId(event.target.value);
-                  setSelectedVertex(null);
-                }}
-              >
-                {drawablePlanes.map((plane) => (
-                  <option key={plane.id} value={plane.id}>
-                    {plane.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Nome della falda
-              <input
-                value={activePlane.label}
-                onChange={(event) => renameActivePlane(event.target.value)}
-              />
-            </label>
-
-            <h3>Orientamento pannelli</h3>
-            <div className="panel-orientation-choice">
-              <button
-                type="button"
-                className={
-                  activePlane.layoutOrientation === "portrait" ? "selected" : ""
-                }
-                onClick={() => changeOrientation("portrait")}
-              >
-                ▯ Portrait
-              </button>
-              <button
-                type="button"
-                className={
-                  activePlane.layoutOrientation === "landscape"
-                    ? "selected"
-                    : ""
-                }
-                onClick={() => changeOrientation("landscape")}
-              >
-                ▭ Landscape
-              </button>
-            </div>
-            <div className="summary-strip">
-              <strong>{activePlane.panels.length} pannelli</strong>
-              <br />
-              {(
-                (activePlane.panels.length * cfg.pv.panel.powerWp) /
-                1000
-              ).toFixed(1)}{" "}
-              kWp nella falda selezionata
-            </div>
-
-            <h3>Ostacoli</h3>
-            <p className="panel-help-text">
-              Disegna finestre, comignoli o altre zone dove non è possibile
-              installare pannelli. Seleziona un punto e premi Canc o Backspace
-              per rimuoverlo.
-            </p>
-            {mode === "obstacle" ? (
-              <div className="panel-drawing-controls">
-                <select
-                  value={obstacleType}
-                  onChange={(event) => setObstacleType(event.target.value)}
-                >
-                  <option>Comignolo</option>
-                  <option>Finestra</option>
-                  <option>Lucernario</option>
-                  <option>Altro ostacolo</option>
-                </select>
-                <span>{draftPoints.length} punti</span>
-                <button
-                  type="button"
-                  className="yellow"
-                  disabled={draftPoints.length < 3}
-                  onClick={completeObstacle}
-                >
-                  Completa ostacolo
-                </button>
-                <button type="button" className="outline" onClick={cancelMode}>
-                  Annulla
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => startMode("obstacle")}
-                disabled={!mapReady || mode !== "idle"}
-              >
-                + Aggiungi ostacolo
-              </button>
-            )}
-            {(activePlane.obstacles ?? []).map((obstacle) => (
-              <div className="panel-list-row" key={obstacle.id}>
-                <span>{obstacle.label}</span>
-                <button
-                  type="button"
-                  onClick={() => deleteObstacle(obstacle.id)}
-                >
-                  Elimina
-                </button>
-              </div>
-            ))}
-
-            <h3>Suddivisioni interne</h3>
-            <p className="panel-help-text">
-              Se la falda contiene un cambio di inclinazione, traccia una linea
-              di separazione interna. In alternativa, torna allo step Tetto e
-              disegna due falde distinte.
-            </p>
-            {mode === "slope" ? (
-              <div className="panel-drawing-controls">
-                <span>{draftPoints.length}/2 estremi</span>
-                <button
-                  type="button"
-                  className="yellow"
-                  disabled={draftPoints.length !== 2}
-                  onClick={completeSlopeLine}
-                >
-                  Salva separazione
-                </button>
-                <button type="button" className="outline" onClick={cancelMode}>
-                  Annulla
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => startMode("slope")}
-                disabled={!mapReady || mode !== "idle"}
-              >
-                + Indica separazione falda
-              </button>
-            )}
-            {(activePlane.slopeLines ?? []).map((line) => (
-              <div className="panel-list-row" key={line.id}>
-                <span>{line.label}</span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    update((currentProject) => ({
-                      ...currentProject,
-                      roof: {
-                        ...currentProject.roof,
-                        planes: currentProject.roof.planes.map((plane) =>
-                          plane.id === activePlane.id
-                            ? (() => {
-                                const nextPlane = {
-                                  ...plane,
-                                  slopeLines: (plane.slopeLines ?? []).filter(
-                                    (item) => item.id !== line.id,
-                                  ),
-                                };
-                                return {
-                                  ...nextPlane,
-                                  panels: packPanels(nextPlane, cfg),
-                                };
-                              })()
-                            : plane,
-                        ),
-                      },
-                    }))
-                  }
-                >
-                  Elimina
-                </button>
-              </div>
-            ))}
-
-            <div className="panels-wizard-actions">
-              <button type="button" className="outline" onClick={onBack}>
-                ‹ Torna al tetto
-              </button>
-              <button
-                type="button"
-                className="yellow"
-                onClick={onNext}
-                disabled={mode !== "idle"}
-              >
-                Continua ai consumi ›
-              </button>
-            </div>
-          </aside>
-          <button
-            type="button"
-            className="map-scroll-cta"
-            onClick={() =>
-              document
-                .getElementById("panels-help")
-                ?.scrollIntoView({ behavior: "smooth", block: "start" })
-            }
-          >
-            Come configurare i pannelli ↓
-          </button>
-        </div>
-      </div>
-
-      <div className="location-title-band" id="panels-help">
-        <p className="eyebrow green">Pannelli</p>
-        <h1>Ottimizza la disposizione sul tetto</h1>
-      </div>
-      <div className="location-topbar panels-instructions">
-        <p>
-          Scegli portrait o landscape per ogni falda. I pannelli vengono
-          allineati al bordo principale del tetto, non allo schermo, e il
-          sistema riempie automaticamente la superficie della falda rispettando
-          margini e ostacoli.
-        </p>
-        <ol>
-          <li>Seleziona e rinomina la falda.</li>
-          <li>Confronta portrait e landscape in tempo reale.</li>
-          <li>Disegna finestre, comignoli e zone non utilizzabili.</li>
-          <li>Traccia le separazioni tra falde quando necessario.</li>
-        </ol>
-      </div>
-      <VisualFooter
-        left="Gli ostacoli vengono esclusi automaticamente dal calcolo."
-        right="La disposizione viene salvata sul tuo dispositivo."
+        right={preview ? "Per correggere il layout, torna a Modifica superfici." : "Trascina i punti per correggere le falde disegnate."}
       />
     </section>
   );

@@ -11,7 +11,7 @@ export interface PanelPlacement { id: string; roofPlaneId: string; position: Poi
 export interface RoofObstacle { id: string; label: string; polygon: Point[]; mapPolygon: GeoPoint[] }
 export interface RoofSlopeLine { id: string; label: string; points: [GeoPoint, GeoPoint] }
 export interface RoofPlane { id: string; label: string; polygon: Point[]; mapPolygon?: GeoPoint[]; obstacles?: RoofObstacle[]; slopeLines?: RoofSlopeLine[]; areaM2: number; azimuthDeg: number; pitchPreset: PitchPreset; pitchDeg: number; usable: boolean; layoutOrientation: 'portrait' | 'landscape'; panels: PanelPlacement[] }
-export interface Roof { detectionMethod: 'manual' | 'assisted' | 'fixture'; confirmedByUser: boolean; planes: RoofPlane[]; manualCapacityOverride?: number }
+export interface Roof { detectionMethod: 'manual' | 'assisted' | 'fixture'; confirmedByUser: boolean; planes: RoofPlane[]; manualCapacityOverride?: number; mapMagnification?: 1 | 2 | 4 }
 export interface ElectricityInput { mode: ConsumptionMode; annualKwh?: number; monthlyKwh?: number[]; hourlyKwh?: number[]; csvImportMetadata?: Record<string, unknown>; qualityFlags: string[] }
 export interface Heating { source: 'gas' | 'electric' | 'none'; gasSmcYear?: number; gasInputMode: 'smc' | 'expense' | 'none'; gasExpenseYear?: number; estimatedFromExpense: boolean }
 export interface CurrentHome { floorAreaM2: number; occupants: number; occupancyProfile: OccupancyProfile; meterPowerKw?: number; electricityInput: ElectricityInput; heating: Heating; hotWater: 'gas' | 'electric'; cooking: 'gas' | 'induction'; cooling: boolean }

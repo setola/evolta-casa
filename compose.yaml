@@ -1,0 +1,78 @@
+name: evolta-casa
+
+x-node: &node
+  # Node 26 LTS (Lithium); pin both the version and the multi-platform digest.
+  image: node:26.13.0-bookworm-slim@sha256:add5c17c14752c54d2f3d519ec46a3815684d41c33f198bcb09fb998f7dcbf68
+  user: "${LOCAL_UID:?Set LOCAL_UID}:${LOCAL_GID:?Set LOCAL_GID}"
+  init: true
+  working_dir: /app
+  environment:
+    HOME: /tmp
+    NPM_CONFIG_CACHE: /tmp/npm-cache
+    DEV_HOST: "${DEV_HOST:-evolta-casa.local}"
+    DEV_ALLOWED_HOSTS: "${DEV_ALLOWED_HOSTS:-}"
+    # Forward optional public browser keys from the Compose host environment.
+    # Null entries stay unset when absent, preserving Vite's .env.local fallback.
+    VITE_GOOGLE_MAPS_API_KEY:
+    VITE_GOOGLE_MAPS_PLACES_API_KEY:
+    VITE_GOOGLE_MAPS_JS_API_KEY:
+  volumes:
+    - type: bind
+      source: .
+      target: /app
+    - type: bind
+      source: ./.docker/node_modules
+      target: /app/node_modules
+      bind:
+        create_host_path: false
+
+services:
+  web:
+    <<: *node
+    ports:
+      - "${APP_PORT:-5173}:5173"
+    command: [sh, -c, "npm ci && exec npm run dev -- --port 5173 --strictPort"]
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:5173/').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      start_period: 30s
+      retries: 5
+
+  # Optional secure context for LAN PWA/geolocation checks.
+  https:
+    image: caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+    profiles: [tls]
+    user: "${LOCAL_UID:?Set LOCAL_UID}:${LOCAL_GID:?Set LOCAL_GID}"
+    init: true
+    environment:
+      HOME: /tmp
+      XDG_DATA_HOME: /data
+      XDG_CONFIG_HOME: /config
+      DEV_HOST: "${DEV_HOST:-evolta-casa.local}"
+    ports:
+      - "${TLS_PORT:-8443}:8443"
+    volumes:
+      - type: bind
+        source: ./docker/Caddyfile
+        target: /etc/caddy/Caddyfile
+        read_only: true
+      - type: bind
+        source: ./.docker/caddy-data
+        target: /data
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./.docker/caddy-config
+        target: /config
+        bind:
+          create_host_path: false
+    depends_on:
+      web:
+        condition: service_healthy
+
+  npm:
+    <<: *node
+    profiles: [cli]
+    entrypoint: [npm]
+    command: ["--help"]
