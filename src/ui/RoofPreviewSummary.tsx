@@ -1,4 +1,5 @@
 import type { AppConfig, RoofPlane } from "../types";
+import { roofPlaneStyle } from "./roofColors";
 
 type Props = {
   planes: RoofPlane[];
@@ -23,7 +24,7 @@ export function RoofPreviewSummary({ planes, config, onEdit, onConfirm }: Props)
       </div>
       <ul className="roof-preview-planes">
         {usable.map((plane) => (
-          <li key={plane.id}>
+          <li key={plane.id} style={roofPlaneStyle(plane)}>
             <strong>{plane.label}</strong>
             <span>{plane.panels.length} pannelli · {plane.layoutOrientation === "portrait" ? "verticali" : "orizzontali"}</span>
           </li>

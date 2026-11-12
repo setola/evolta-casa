@@ -597,8 +597,10 @@ small {
 .roof-preview-planes li {
   display: grid;
   gap: 0.25rem;
-  padding: 0.65rem 0;
-  border-bottom: 1px solid #dbe7e8;
+  padding: 0.6rem 0.65rem;
+  margin: 0.45rem 0;
+  border: 1px solid #dbe7e8;
+  border-radius: 10px;
 }
 .roof-preview-planes span,
 .roof-preview-note {
@@ -639,14 +641,8 @@ small {
   margin-top: 1rem;
 }
 .roof-optional-settings {
-  margin-top: 1.2rem;
-  padding-top: 0.75rem;
+  margin-top: 0.85rem;
   border-top: 1px solid #dbe7e8;
-}
-.roof-optional-caption {
-  margin: 0 0 0.35rem;
-  color: #48627a;
-  font-size: 0.8rem;
 }
 .roof-accordion-toggle {
   display: flex;
@@ -772,15 +768,14 @@ small {
   font-weight: 600;
   background: #ffffffcc;
 }
-.plane-row:first-of-type {
-  background: #edfbe9;
-  border-color: #65bd70;
+.plane-row[data-usable="false"] {
+  opacity: 0.6;
 }
 .plane-row button {
   width: 32px;
   height: 32px;
   padding: 0;
-  background: #20a23a;
+  background: var(--roof-plane-color, #0f766e);
   color: white;
 }
 .pitch-grid {
@@ -844,26 +839,31 @@ details label {
 
 .future-step {
   position: relative;
-  min-height: 790px;
+  box-sizing: border-box;
+  min-height: 100vh;
+  min-height: 100svh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 390px;
+  grid-template-rows: 1fr auto auto;
+  gap: 1.5rem;
+  padding: 3rem 2rem 0;
   margin: 0;
   border-radius: 0;
   box-shadow: none;
-  background: #eaf4fb;
+  background:
+    linear-gradient(180deg, #eaf6ffdd 0%, #eaf6ff55 36%, #0000 70%),
+    url("/ui/casa.png") center / cover no-repeat;
   color: #0b1b33;
-  overflow: hidden;
 }
 .future-hero {
-  position: absolute;
-  inset: 0 28% 110px 0;
-  background: url("/ui/casa.png") 18% center / cover no-repeat;
-  padding: 3rem 2.5rem;
+  position: relative;
+  grid-column: 1;
+  grid-row: 1;
+  min-height: 490px;
+  padding: 0;
 }
 .future-hero:after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, #eaf6ffdd 0%, #eaf6ff66 36%, #0000 70%);
-  pointer-events: none;
+  content: none;
 }
 .future-hero h1,
 .future-hero p,
@@ -915,10 +915,13 @@ details label {
   top: 61%;
 }
 .future-panel {
-  position: absolute;
-  right: 2rem;
-  top: 4.5rem;
-  width: 390px;
+  position: relative;
+  grid-column: 2;
+  grid-row: 1;
+  align-self: start;
+  min-width: 0;
+  box-sizing: border-box;
+  width: 100%;
 }
 .recommended-choice {
   display: flex;
@@ -980,10 +983,9 @@ details label {
   margin-top: 1rem;
 }
 .future-summary {
-  position: absolute;
-  left: 2rem;
-  right: 2rem;
-  bottom: 86px;
+  position: relative;
+  grid-column: 1 / -1;
+  grid-row: 2;
   z-index: 3;
   background: #fffffff0;
   border-radius: 18px;
@@ -1016,7 +1018,11 @@ details label {
   padding: 0.9rem;
 }
 .future-step .visual-footer {
-  bottom: 0;
+  position: relative;
+  grid-column: 1 / -1;
+  grid-row: 3;
+  inset: auto;
+  margin: 0 -2rem;
 }
 .future-step .visual-footer .yellow,
 .future-step .visual-footer .outline {
@@ -1105,9 +1111,32 @@ details label {
   .callout {
     display: none;
   }
+  .future-step {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    min-height: 100svh;
+    gap: 1rem;
+  }
   .future-hero {
+    min-height: 0;
     background: none;
     padding: 1rem;
+    margin: 0;
+  }
+  .future-panel,
+  .future-summary {
+    margin: 0;
+  }
+  .future-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .future-summary em {
+    transform: rotate(90deg);
+    font-size: 1.5rem;
+  }
+  .future-step .visual-footer {
+    margin: auto -1rem -1rem;
   }
   .visual-footer {
     display: block;
@@ -1161,16 +1190,19 @@ details label {
 }
 .home-hero {
   position: relative;
-  min-height: 590px;
+  box-sizing: border-box;
+  min-height: 100vh;
+  min-height: 100svh;
   background:
     linear-gradient(90deg, #002b36 0%, #00313ccc 36%, #00313c22 62%),
     url("/ui/casa.png") 78% center / cover no-repeat;
   color: white;
   display: grid;
-  grid-template-columns: minmax(420px, 610px) 1fr;
+  grid-template-columns: minmax(0, 610px) minmax(250px, 320px);
+  justify-content: space-between;
+  gap: clamp(2rem, 4vw, 4rem);
   align-items: center;
-  padding: 0 3rem;
-  overflow: hidden;
+  padding: 2rem 3rem;
 }
 .home-hero-copy {
   position: relative;
@@ -1251,10 +1283,12 @@ details label {
   font-weight: 500;
 }
 .result-example {
-  position: absolute;
-  right: 2.5rem;
-  top: 1.6rem;
-  width: 280px;
+  position: relative;
+  grid-column: 2;
+  grid-row: 1;
+  align-self: start;
+  box-sizing: border-box;
+  width: 100%;
   background: #fffffff4;
   color: #071929;
   border: 0;
@@ -1400,8 +1434,8 @@ details label {
     flex: 1;
   }
   .home-hero {
-    display: block;
-    min-height: auto;
+    grid-template-columns: minmax(0, 1fr);
+    align-content: center;
     padding: 2rem 1rem;
     background:
       linear-gradient(#00313cdd, #00313caa),
@@ -1411,11 +1445,10 @@ details label {
     font-size: 2.7rem;
   }
   .result-example {
-    position: relative;
-    right: auto;
-    top: auto;
-    width: auto;
-    margin-top: 1.5rem;
+    grid-column: 1;
+    grid-row: auto;
+    width: 100%;
+    margin: 0;
   }
   .home-search {
     grid-template-columns: 1fr;
@@ -1918,40 +1951,45 @@ details label {
   zoom: var(--roof-map-ui-scale, 1);
 }
 .roof-work-zoom {
-  position: absolute;
-  z-index: 3;
-  top: 1rem;
-  right: 1rem;
-  display: grid;
-  gap: 0.4rem;
-  padding: 0.7rem;
-  border-radius: 12px;
-  background: #fffffff7;
-  color: #0b1b33;
-  box-shadow: 0 6px 24px #0015;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+  padding: 0.5rem 0;
+  border-top: 1px solid #dbe7e8;
+  color: #0b3550;
+}
+.roof-optional-settings + .roof-work-zoom {
+  margin-top: 0;
+  border-top: 0;
 }
 .roof-work-zoom > span {
-  font-weight: 700;
+  font-size: 0.9rem;
+  font-weight: 600;
 }
 .roof-work-zoom > div {
   display: flex;
   gap: 0.35rem;
 }
 .roof-work-zoom button {
-  min-width: 44px;
-  min-height: 44px;
-  padding: 0.4rem;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0.35rem;
   border: 1px solid #cbdce2;
-  background: white;
+  background: transparent;
   color: #0b3550;
   border-radius: 8px;
+  font-size: 0.85rem;
 }
 .roof-work-zoom button[aria-pressed="true"] {
-  background: #ffca28;
-  border-color: #ffca28;
+  background: #e8f5f3;
+  border-color: #9bcfc5;
+  color: #064e3b;
 }
-.roof-work-zoom small {
-  font-size: 0.75rem;
+.roof-work-zoom button:focus-visible {
+  outline: 2px solid #0f766e;
+  outline-offset: 2px;
 }
 .fixed-center-pin {
   position: absolute;
@@ -2090,10 +2128,6 @@ details label {
   .panels-map-shell .roof-map-canvas {
     position: absolute;
     min-height: 0;
-  }
-  .roof-work-zoom {
-    top: 0.5rem;
-    right: 0.5rem;
   }
   .panels-control-panel {
     position: relative;

@@ -1,0 +1,32 @@
+.settings-footer { max-width: 1180px; margin: 1.5rem auto 0; padding: 1.5rem 1rem 2rem; border-top: 1px solid #e0e9e4; text-align: center; font-size: .8rem; }
+.settings-footer a { color: #52665e; text-decoration: underline; text-underline-offset: 3px; }
+.settings-footer a:focus-visible { outline: 3px solid #0f766e; outline-offset: 4px; }
+.tariffs-page { max-width: 1100px; margin: 1.5rem auto; }
+.tariffs-page h1 { margin: .6rem 0; }
+.tariffs-page h2 { margin: 2rem 0 .65rem; font-size: 1.3rem; }
+.tariffs-page p { line-height: 1.65; color: #435a50; }
+.assumptions-eyebrow { color: #52665e; font-size: .8rem; }
+.assumptions-warning { background: #fff8e7; border: 1px solid #e9cb77; border-radius: 1rem; padding: 1rem 1.2rem; margin: 1.5rem 0; color: #69480a; }
+.assumptions-warning p { color: inherit; margin: .6rem 0 0; font-size: .9rem; }
+.assumptions-table-scroll { overflow-x: auto; margin: 1rem 0 1.5rem; }
+.assumptions-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: .85rem; text-align: left; }
+.assumptions-table caption { text-align: left; color: #435a50; font-weight: 700; padding: .6rem 0; }
+.assumptions-table th, .assumptions-table td { padding: .9rem; border: 1px solid #dce6e0; vertical-align: top; overflow-wrap: anywhere; line-height: 1.55; }
+.assumptions-table thead th { background: #eef6f1; }
+.assumptions-table thead th:first-child { width: 23%; }
+.assumptions-table thead th:nth-child(2) { width: 33%; }
+.assumptions-table tbody th { font-weight: 600; background: #fafcfb; }
+.assumptions-table label { font-weight: 600; }
+.assumptions-table small { display: block; margin-top: .4rem; font-size: .75rem; color: #52665e; font-weight: 400; }
+.assumptions-table input, .assumptions-table textarea { width: 100%; min-width: 0; box-sizing: border-box; background: white; font: inherit; color: #0b1b33; }
+.assumptions-table textarea { border: 1px solid #cbd5d1; border-radius: .75rem; padding: .65rem; resize: vertical; }
+.assumptions-table [aria-invalid="true"] { border-color: #a52222; outline-color: #a52222; }
+.assumptions-reference-value { white-space: pre-wrap; }
+.assumptions-table small.assumptions-error, .assumptions-error { color: #a52222; }
+.assumptions-apply { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; border-top: 1px solid #dce6e0; padding: 1.25rem 0; }
+.assumptions-legal { font-size: .85rem; border-top: 1px solid #dce6e0; padding-top: 1rem; }
+@media (max-width: 650px) {
+  .assumptions-table { min-width: 660px; }
+  .tariffs-page { padding: 1rem; }
+  .assumptions-apply button { width: 100%; }
+}

@@ -365,6 +365,61 @@ describe("RoofStep plane naming", () => {
   });
 });
 
+describe("Roof color identity", () => {
+  it("matches map outlines, editable rows and preview rows and does not recolor after deletion", async () => {
+    await mount();
+    const firstColor = latest.roof.planes[0].color;
+    await click("Disegna un’altra falda");
+    await drawPoints();
+    await click("Completa falda");
+    expect(new Set(latest.roof.planes.map((plane) => plane.color)).size).toBe(2);
+    expect(latest.roof.planes[0].color).toBe(firstColor);
+    const rows = Array.from(container.querySelectorAll<HTMLElement>(".plane-row"));
+    latest.roof.planes.forEach((plane, index) => {
+      const outline = mapOverlays.find((overlay) => overlay.options.map && overlay.options.paths === plane.mapPolygon);
+      expect(outline!.options.strokeColor).toBe(plane.color);
+      expect(outline!.options.fillColor).toBe(plane.color);
+      expect(rows[index].style.getPropertyValue("--roof-plane-color")).toBe(plane.color);
+      const normalized = document.createElement("div");
+      normalized.style.color = plane.color!;
+      expect(rows[index].style.borderColor).toBe(normalized.style.color);
+      expect(rows[index].style.backgroundColor).toContain(normalized.style.color.replace("rgb(", "rgba(").replace(")", ""));
+    });
+    const colors = latest.roof.planes.map((plane) => plane.color);
+    await click("Vedi i pannelli");
+    const previews = Array.from(container.querySelectorAll<HTMLElement>(".roof-preview-planes li"));
+    expect(previews.map((row) => row.style.getPropertyValue("--roof-plane-color"))).toEqual(colors);
+    await click("Modifica superfici");
+    await click("Elimina Falda 1");
+    expect(latest.roof.planes[0].color).toBe(colors[1]);
+    expect(container.querySelector<HTMLElement>(".plane-row")!.style.getPropertyValue("--roof-plane-color")).toBe(colors[1]);
+  });
+});
+
+describe("Roof zoom in card", () => {
+  it("keeps a single quiet zoom group in the card in both edit and preview modes", async () => {
+    await mount();
+    const assertZoomInCard = () => {
+      const groups = container.querySelectorAll(".roof-work-zoom");
+      expect(groups).toHaveLength(1);
+      expect(groups[0].closest(".roof-drawing-panel")).not.toBeNull();
+      expect(container.querySelector(".roof-map-shell > .roof-work-zoom")).toBeNull();
+      expect(container.textContent).not.toContain("Opzioni facoltative");
+      expect(container.textContent).not.toContain("Mostra disposizione automatica");
+    };
+    assertZoomInCard();
+    await click("4×");
+    await click("Vedi i pannelli");
+    assertZoomInCard();
+    expect(button("4×").getAttribute("aria-pressed")).toBe("true");
+    await click("2×");
+    expect(container.querySelector<HTMLElement>(".roof-map-canvas")!.style.transform).toBe("scale(2)");
+    await click("Modifica superfici");
+    assertZoomInCard();
+    expect(button("2×").getAttribute("aria-pressed")).toBe("true");
+  });
+});
+
 describe("Roof automatic preview", () => {
   it.each([1, 2, 4])("shows only read-only panel footprints at %s× and preserves geometry when editing again", async (scale) => {
     await mount();
@@ -375,7 +430,7 @@ describe("Roof automatic preview", () => {
       packPanels(plane, config, "portrait").length,
       packPanels(plane, config, "landscape").length,
     ));
-    await click("Mostra disposizione automatica");
+    await click("Vedi i pannelli");
     expect(container.querySelector(".roof-preview-summary")).not.toBeNull();
     expect(container.querySelector(".roof-preview-planes")!.textContent).toContain(plane.label);
     expect(container.querySelector(".roof-plane-name")).toBeNull();
@@ -393,12 +448,12 @@ describe("Roof automatic preview", () => {
   it("does not continue with zero capacity and lets the user correct the surfaces", async () => {
     await mount();
     await act(async () => container.querySelector<HTMLButtonElement>("[aria-label^='Escludi']")!.click());
-    await click("Mostra disposizione automatica");
+    await click("Vedi i pannelli");
     expect(button("Continua ai consumi ›").disabled).toBe(true);
     expect(container.querySelector("[role='alert']")!.textContent).toContain("Nessun pannello");
     await click("Modifica superfici");
     await act(async () => container.querySelector<HTMLButtonElement>("[aria-label^='Includi']")!.click());
-    await click("Mostra disposizione automatica");
+    await click("Vedi i pannelli");
     expect(button("Continua ai consumi ›").disabled).toBe(false);
   });
 
@@ -438,7 +493,7 @@ describe("Working zoom between wizard steps", () => {
     await click("+ Indica separazione falda");
     await drawPoints(points.slice(0, 2));
     await click("Salva separazione");
-    await click("Mostra disposizione automatica");
+    await click("Vedi i pannelli");
     expect(window.location.pathname).toBe("/tetto");
     expect(container.querySelector(".roof-preview-summary")).not.toBeNull();
     expect(container.querySelector("#roof-subdivision-toggle")).toBeNull();
@@ -478,7 +533,7 @@ describe("RoofStep subdivisions", () => {
     expect(container.querySelector("#roof-subdivision-editor")).toBeNull();
     await click("Suddivisioni interne");
     await click("+ Indica separazione falda");
-    expect(button("Mostra disposizione automatica").disabled).toBe(true);
+    expect(button("Vedi i pannelli").disabled).toBe(true);
     expect(button("Disegna un’altra falda").disabled).toBe(true);
     expect(button("Ostacoli sul tetto").disabled).toBe(true);
     await drawPoints();
@@ -507,7 +562,7 @@ describe("RoofStep subdivisions", () => {
       packPanels(plane, config).map(({ id: _id, ...panel }) => panel),
     );
     expect(latest.roof.confirmedByUser).toBe(false);
-    expect(button("Mostra disposizione automatica").disabled).toBe(false);
+    expect(button("Vedi i pannelli").disabled).toBe(false);
     await click("Suddivisioni interne");
     await click("Suddivisioni interne");
     expect(container.textContent).toContain("Separazione falda 1");
@@ -531,13 +586,13 @@ describe("RoofStep subdivisions", () => {
       select.value = latest.roof.planes[1].id;
       select.dispatchEvent(new Event("change", { bubbles: true }));
     });
-    expect(button("Mostra disposizione automatica").disabled).toBe(false);
+    expect(button("Vedi i pannelli").disabled).toBe(false);
     expect(container.textContent).not.toContain("Salva separazione");
     await click("+ Indica separazione falda");
     await drawPoints();
     await click("Suddivisioni interne");
     expect(container.querySelector("#roof-subdivision-editor")).toBeNull();
-    expect(button("Mostra disposizione automatica").disabled).toBe(false);
+    expect(button("Vedi i pannelli").disabled).toBe(false);
     expect(latest.roof.planes.every((plane) => !plane.slopeLines?.length)).toBe(true);
   });
 
@@ -557,7 +612,7 @@ describe("RoofStep optional settings", () => {
   it("keeps drawing and confirmation primary with both advanced sections collapsed", async () => {
     await mount();
     expect(button("Disegna un’altra falda").disabled).toBe(false);
-    expect(button("Mostra disposizione automatica").disabled).toBe(false);
+    expect(button("Vedi i pannelli").disabled).toBe(false);
     expect(button("Inclinazione del tetto").getAttribute("aria-expanded")).toBe("false");
     expect(button("Ostacoli sul tetto").getAttribute("aria-expanded")).toBe("false");
     expect(container.querySelector("#roof-pitch-editor")).toBeNull();
@@ -565,7 +620,7 @@ describe("RoofStep optional settings", () => {
     expect(container.textContent).not.toContain("Molto inclinato");
     expect(container.textContent).not.toContain("Tipo di ostacolo");
     const controls = Array.from(container.querySelectorAll(".roof-drawing-panel button"));
-    expect(controls.indexOf(button("Mostra disposizione automatica"))).toBeLessThan(
+    expect(controls.indexOf(button("Vedi i pannelli"))).toBeLessThan(
       controls.indexOf(button("Inclinazione del tetto")),
     );
   });
@@ -593,10 +648,10 @@ describe("RoofStep optional settings", () => {
     await click("Ostacoli sul tetto");
     await click("Disegna ostacolo sulla mappa");
     await drawPoints();
-    expect(button("Mostra disposizione automatica").disabled).toBe(true);
+    expect(button("Vedi i pannelli").disabled).toBe(true);
     await click("Ostacoli sul tetto");
     expect(container.querySelector("#roof-obstacle-editor")).toBeNull();
-    expect(button("Mostra disposizione automatica").disabled).toBe(false);
+    expect(button("Vedi i pannelli").disabled).toBe(false);
     expect(latest.roof.planes[0].obstacles).toEqual([]);
     expect(latest.roof.planes[0].mapPolygon).toEqual(points);
   });
@@ -624,12 +679,12 @@ describe("RoofStep obstacle disclosure", () => {
   it("blocks confirmation during drafts and preserves saved obstacles on close", async () => {
     await mount();
     await click("Disegna un’altra falda");
-    expect(button("Mostra disposizione automatica").disabled).toBe(true);
+    expect(button("Vedi i pannelli").disabled).toBe(true);
     expect(button("Ostacoli sul tetto").disabled).toBe(true);
     await click("Annulla disegno");
     await click("Ostacoli sul tetto");
     await click("Disegna ostacolo sulla mappa");
-    expect(button("Mostra disposizione automatica").disabled).toBe(true);
+    expect(button("Vedi i pannelli").disabled).toBe(true);
     expect(button("Disegna un’altra falda").disabled).toBe(true);
     await drawPoints();
     await click("Completa ostacolo");
@@ -641,7 +696,7 @@ describe("RoofStep obstacle disclosure", () => {
     await click("Disegna un altro ostacolo");
     await drawPoints();
     await click("Richiudi ostacoli");
-    expect(button("Mostra disposizione automatica").disabled).toBe(false);
+    expect(button("Vedi i pannelli").disabled).toBe(false);
     expect(latest.roof.planes[0].obstacles).toHaveLength(1);
   });
 
@@ -661,7 +716,7 @@ describe("RoofStep obstacle disclosure", () => {
       select.dispatchEvent(new Event("change", { bubbles: true }));
     });
     expect(container.textContent).not.toContain("Completa ostacolo");
-    expect(button("Mostra disposizione automatica").disabled).toBe(false);
+    expect(button("Vedi i pannelli").disabled).toBe(false);
     expect(latest.roof.planes.every((plane) => !plane.obstacles?.length)).toBe(
       true,
     );
@@ -694,7 +749,7 @@ describe("RoofStep obstacle disclosure", () => {
       )!.value,
     ).toBe("");
     expect(container.textContent).not.toContain("Completa ostacolo");
-    expect(button("Mostra disposizione automatica").disabled).toBe(false);
+    expect(button("Vedi i pannelli").disabled).toBe(false);
     expect(button("Disegna ostacolo sulla mappa").disabled).toBe(true);
   });
 });

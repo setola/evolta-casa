@@ -9,6 +9,7 @@ const allowedHosts = [
 ].map(host => host.trim()).filter(Boolean);
 
 export default defineConfig({
+  base: process.env.BASE_PATH || '/',
   plugins: [react()],
   server: {
     allowedHosts,

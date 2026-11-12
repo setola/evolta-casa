@@ -4,11 +4,15 @@ import { afterEach, describe, expect, it } from "vitest";
 
 // These are Google's live DOM shapes, not additional controls rendered by us.
 // Read the actual CSS rule to catch missing selectors without duplicating them.
-function counterScaleSelector() {
+function loadStyles() {
   const style = document.createElement("style");
   style.textContent = fs.readFileSync("src/styles.css", "utf8");
   document.head.appendChild(style);
-  const rule = Array.from(style.sheet!.cssRules).find((entry) =>
+  return Array.from(style.sheet!.cssRules);
+}
+
+function counterScaleSelector() {
+  const rule = loadStyles().find((entry) =>
     entry instanceof CSSStyleRule &&
     entry.style.getPropertyValue("zoom") === "var(--roof-map-ui-scale, 1)",
   ) as CSSStyleRule | undefined;
@@ -19,6 +23,22 @@ function counterScaleSelector() {
 afterEach(() => {
   document.head.querySelectorAll("style").forEach((style) => style.remove());
   document.body.replaceChildren();
+});
+
+describe("roof card separators", () => {
+  it("uses only the last accordion border before zoom, preserving the preview divider", () => {
+    loadStyles();
+    document.body.innerHTML = `<aside>
+      <div class="roof-optional-settings"><button class="roof-accordion-toggle">Suddivisioni interne</button></div>
+      <div class="roof-work-zoom">Zoom</div>
+    </aside>`;
+    const accordion = document.querySelector(".roof-accordion-toggle")!;
+    const zoom = document.querySelector(".roof-work-zoom")!;
+    expect(getComputedStyle(accordion).borderBottomWidth).toBe("1px");
+    expect(getComputedStyle(zoom).borderTopWidth).toBe("0px");
+    document.querySelector(".roof-optional-settings")!.remove();
+    expect(getComputedStyle(zoom).borderTopWidth).toBe("1px");
+  });
 });
 
 describe("unscaled Google Maps chrome", () => {

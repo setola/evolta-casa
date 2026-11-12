@@ -1,0 +1,45 @@
+.consumption-wizard { max-width: 880px; margin: 2rem auto; padding: 0 1rem; }
+.consumption-intro { text-align: center; margin-bottom: 1.5rem; }
+.consumption-intro h1 { margin: .5rem 0; font-size: clamp(1.8rem, 4vw, 2.5rem); }
+.consumption-intro p { color: #52665e; line-height: 1.6; }
+.consumption-eyebrow { color: #087354; font-size: .85rem; font-weight: 800; }
+button.consumption-text-button { background: transparent; color: #09674e; text-decoration: underline; text-underline-offset: 4px; border-radius: .5rem; padding: .65rem 0; }
+.consumption-card { background: white; border: 1px solid #dbe7e2; border-radius: 1.5rem; padding: clamp(1rem, 4vw, 2.5rem); box-shadow: 0 12px 40px #0f766e0c; }
+.consumption-card h2 { margin: 1.8rem 0 .6rem; }
+.consumption-card h2:focus { outline: none; }
+.consumption-card p { line-height: 1.6; }
+.consumption-progress { display: flex; justify-content: space-between; gap: .5rem; list-style: none; padding: 0 0 1.5rem; margin: 0; border-bottom: 1px solid #dbe7e2; }
+.consumption-progress li { display: flex; align-items: center; gap: .5rem; color: #62736b; font-size: .85rem; }
+.consumption-progress li span { display: grid; place-items: center; flex-shrink: 0; width: 1.8rem; height: 1.8rem; border-radius: 50%; background: #edf2ef; font-weight: 800; }
+.consumption-progress li.active { color: #06543c; font-weight: 800; }
+.consumption-progress li.active span { color: white; background: #087354; }
+.consumption-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 1.5rem; }
+.consumption-fields label:last-child { grid-column: 1 / -1; }
+.consumption-fields label, .consumption-heating { gap: .7rem; }
+.consumption-fields input, .consumption-fields select, .consumption-heating select { width: 100%; min-width: 0; box-sizing: border-box; background: white; }
+.consumption-fields small, .consumption-appliances small { display: block; color: #52665e; font-size: .8rem; line-height: 1.5; }
+.consumption-appliances { border: none; padding: 0; margin: 1.5rem 0; display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+.consumption-appliances legend { margin-bottom: .8rem; font-weight: 700; }
+.consumption-appliances label { display: flex; flex-direction: row; align-items: center; gap: .8rem; border: 1px solid #cbd5d1; border-radius: 1rem; padding: 1rem; cursor: pointer; }
+.consumption-appliances label.selected { border-color: #087354; background: #effaf4; }
+.consumption-appliances input { flex-shrink: 0; accent-color: #087354; }
+.consumption-note { background: #f0f7f3; border-radius: .8rem; padding: 1rem; color: #3f584c; font-size: .9rem; line-height: 1.6; }
+.consumption-result { display: grid; gap: .7rem; text-align: center; background: #edf9f1; border: 1px solid #c8e4d2; border-radius: 1rem; padding: 2rem 1rem; margin-top: 1.5rem; }
+.consumption-result > strong { font-size: clamp(2rem, 6vw, 3rem); color: #06543c; }
+.consumption-result strong small { font-size: 1rem; }
+.consumption-breakdown { margin: 1.5rem 0; }
+.consumption-breakdown summary { cursor: pointer; font-weight: 700; }
+.consumption-breakdown ul { list-style: none; padding: 0; }
+.consumption-breakdown li { display: flex; justify-content: space-between; gap: 1rem; border-bottom: 1px solid #e2eae5; padding: .6rem 0; }
+.consumption-breakdown p { font-size: .85rem; color: #52665e; }
+.consumption-wizard-actions { display: flex; justify-content: space-between; gap: 1rem; border-top: 1px solid #dbe7e2; margin-top: 2rem; padding-top: 1.5rem; }
+.consumption-manual { max-width: 1000px; margin: 2rem auto; }
+.consumption-manual .form { margin: 1.5rem 0; }
+.consumption-wizard button:focus-visible, .consumption-manual button:focus-visible { outline: 3px solid #0f766e; outline-offset: 4px; }
+@media (max-width: 600px) {
+  .consumption-fields, .consumption-appliances { grid-template-columns: 1fr; }
+  .consumption-progress li { flex-direction: column; text-align: center; font-size: .75rem; }
+  .consumption-wizard-actions { flex-wrap: wrap; }
+  .consumption-wizard-actions button { flex: 1; }
+  .consumption-wizard { padding: 0 .5rem; margin: 1rem auto; }
+}

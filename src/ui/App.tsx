@@ -1,8 +1,14 @@
 import { ChevronDown, Download, Minus, Play, Plus, Save, Upload } from "lucide-react";
 import { RoofMapViewport } from "./RoofMapViewport";
+import { ConsumptionWizard } from "./ConsumptionWizard";
+import { TariffsPage } from "./TariffsPage";
+import { effectiveConfig } from "../assumptions";
+import { appPath, publicPath } from "../paths";
+import { HOUSEHOLD_ESTIMATE_FLAG } from "../engines/householdEstimate";
 import { MapZoomControls } from "./MapZoomControls";
 import { RoofSubdivisions } from "./RoofSubdivisions";
 import { RoofPreviewSummary } from "./RoofPreviewSummary";
+import { assignRoofColors, nextRoofColor, roofColor, roofPlaneStyle } from "./roofColors";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type {
@@ -19,6 +25,8 @@ import {
   updatePlaneArea,
 } from "../engines/roof";
 import { runSimulation } from "../engines/optimizer";
+import { hourlyFromElectricityInput } from "../engines/consumption";
+import { futureHomeExtraLoads, evHomeLoad } from "../engines/electrification";
 import { newId } from "../id";
 import { applyPreset, createProject } from "../project";
 import {
@@ -92,8 +100,7 @@ function zoomMapToMaximum(
   );
 }
 function pathToStep(pathname: string) {
-  const normalized =
-    pathname.length > 1 ? pathname.replace(/\/$/, "") : pathname;
+  const normalized = appPath(pathname);
   if (normalized === "/pannelli") return 2;
   const index = stepRoutes.indexOf(normalized);
   return index >= 0 ? index : 0;
@@ -142,15 +149,18 @@ declare global {
   }
 }
 
-export function App({ config }: { config: AppConfig }) {
-  const seo = config.seoPages.find(
-    (p) => p.slug === window.location.pathname && p.enabled,
+export function App({ config: baseConfig }: { config: AppConfig }) {
+  const seo = baseConfig.seoPages.find(
+    (p) => p.slug === appPath(window.location.pathname) && p.enabled,
   );
   const [project, setProject] = useState<Project>(
     () =>
       loadDraftProject() ??
-      applyPreset(createProject(config, seo?.slug), seo?.preset),
+      applyPreset(createProject(baseConfig, seo?.slug), seo?.preset),
   );
+  // update() clones the project: memoize by values to keep RoofStep's layout effect stable.
+  const overridesKey = JSON.stringify(project.assumptionOverrides ?? {});
+  const config = useMemo(() => effectiveConfig(baseConfig, JSON.parse(overridesKey)), [baseConfig, overridesKey]);
   const [step, setStep] = useState(() => pathToStep(window.location.pathname));
   const [saved, setSaved] = useState<Project[]>([]);
   const [message, setMessage] = useState("");
@@ -173,8 +183,8 @@ export function App({ config }: { config: AppConfig }) {
   useEffect(() => {
     const onPopState = () => {
       const nextStep = pathToStep(window.location.pathname);
-      if (/^\/pannelli\/?$/.test(window.location.pathname)) {
-        window.history.replaceState(window.history.state, "", `/tetto${window.location.search}${window.location.hash}`);
+      if (appPath(window.location.pathname) === "/pannelli") {
+        window.history.replaceState(window.history.state, "", `${publicPath('/tetto')}${window.location.search}${window.location.hash}`);
       }
       setStep(nextStep);
     };
@@ -184,7 +194,7 @@ export function App({ config }: { config: AppConfig }) {
   }, []);
   function navigateStep(nextStep: number) {
     const safeStep = Math.max(0, Math.min(stepRoutes.length - 1, nextStep));
-    const nextPath = stepRoutes[safeStep];
+    const nextPath = publicPath(stepRoutes[safeStep]);
     if (window.location.pathname !== nextPath)
       window.history.pushState(null, "", nextPath);
     setStep(safeStep);
@@ -259,11 +269,11 @@ export function App({ config }: { config: AppConfig }) {
             onConfirm={() => navigateStep(3)}
           />
         )}
-        {step === 3 && <ConsumptionStep project={project} update={update} />}
-        {step === 4 && <FutureStep project={project} update={update} />}
+        {step === 3 && <ConsumptionStep project={project} update={update} onBack={() => navigateStep(2)} onContinue={() => navigateStep(4)} onSave={persist} />}
+        {step === 4 && <FutureStep project={project} update={update} config={config} />}
         {step === 5 && <MobilityStep project={project} update={update} />}
         {step === 6 && (
-          <TariffsStep project={project} update={update} config={config} />
+          <TariffsPage key={project.id} project={project} update={update} config={config} baseConfig={baseConfig} />
         )}
         {step === 7 && (
           <ResultsStep
@@ -274,12 +284,12 @@ export function App({ config }: { config: AppConfig }) {
             simulate={simulate}
           />
         )}
-        {step !== 0 && step !== 1 && step !== 2 && step !== 4 && (
+        {step !== 0 && step !== 1 && step !== 2 && step !== 3 && step !== 4 && (
           <div className="actions">
             <button
               type="button"
               disabled={step === 0}
-              onClick={() => navigateStep(Math.max(0, step - 1))}
+              onClick={() => navigateStep(step === 7 || step === 6 ? 5 : Math.max(0, step - 1))}
             >
               Indietro
             </button>
@@ -292,7 +302,7 @@ export function App({ config }: { config: AppConfig }) {
             <button
               type="button"
               disabled={step >= stepRoutes.length - 1}
-              onClick={() => navigateStep(step + 1)}
+              onClick={() => step === 5 ? simulate() : navigateStep(step + 1)}
             >
               Avanti
             </button>
@@ -300,6 +310,9 @@ export function App({ config }: { config: AppConfig }) {
         )}
         {message && <p className="toast">{message}</p>}
       </main>
+      <footer className="settings-footer">
+        <a href={publicPath('/prezzi')} onClick={(event) => { event.preventDefault(); navigateStep(6); }}>Prezzi e assunzioni · impostazioni esperte</a>
+      </footer>
     </div>
   );
 }
@@ -320,13 +333,13 @@ function Header({
     <header className={`cw-header ${isHome ? "home-header" : ""}`}>
       <a
         className="cw-brand"
-        href="/"
+        href={publicPath('/')}
         onClick={(e) => {
           e.preventDefault();
           setStep(0);
         }}
       >
-        <img className="cw-logo" src="/ui/logo.svg" alt="" />
+        <img className="cw-logo" src={publicPath('/ui/logo.svg')} alt="" />
         <div>
           <strong>CasaWatt</strong>
           <span>Più valore alla tua energia</span>
@@ -340,7 +353,7 @@ function Header({
         </nav>
       ) : (
         <nav className="cw-stepper" aria-label="Step di configurazione">
-          {steps.slice(1, -1).map((s, i) => (
+          {steps.slice(1, 6).map((s, i) => (
             <button
               type="button"
               key={s}
@@ -1091,7 +1104,7 @@ export function RoofStep({
   useEffect(() => {
     if (layoutSourceRef.current?.id === project.id && layoutSourceRef.current.config === cfg) return;
     layoutSourceRef.current = { id: project.id, config: cfg };
-    update((p) => ({ ...p, roof: { ...p.roof, planes: p.roof.planes.map((plane) => autoLayoutPlane(plane, cfg)) } }));
+    update((p) => ({ ...p, roof: { ...p.roof, planes: assignRoofColors(p.roof.planes).map((plane) => autoLayoutPlane(plane, cfg)) } }));
   }, [project.id, cfg, update]);
 
   const obstaclePlanes = drawnPlanes.filter((plane) => plane.usable);
@@ -1185,15 +1198,16 @@ export function RoofStep({
     overlaysRef.current = [];
 
     drawnPlanes.forEach((plane) => {
+      const color = roofColor(plane);
       const polygon = new google.maps.Polygon({
         map,
         paths: plane.mapPolygon,
         clickable: false,
-        strokeColor: plane.usable ? "#ffca28" : "#94a3b8",
-        strokeOpacity: 1,
+        strokeColor: color,
+        strokeOpacity: plane.usable ? 1 : 0.45,
         strokeWeight: 3 / magnification,
-        fillColor: "#ffca28",
-        fillOpacity: preview ? 0.08 : 0.28,
+        fillColor: color,
+        fillOpacity: plane.usable ? (preview ? 0.08 : 0.14) : 0.04,
       });
       overlaysRef.current.push(polygon);
       (plane.slopeLines ?? []).forEach((line) => {
@@ -1201,7 +1215,7 @@ export function RoofStep({
           map,
           path: line.points,
           clickable: false,
-          strokeColor: "#7dd3fc",
+          strokeColor: color,
           strokeOpacity: 1,
           strokeWeight: 4 / magnification,
         }));
@@ -1289,7 +1303,7 @@ export function RoofStep({
               selectedVertex.planeId === plane.id &&
               !selectedVertex.obstacleId &&
               selectedVertex.pointIndex === pointIndex,
-            "#ffca28",
+            color,
             "#ffffff",
             magnification,
           ),
@@ -1339,15 +1353,16 @@ export function RoofStep({
     });
 
     if (draftPoints.length > 0) {
+      const draftColor = drawingObstacle ? "#ff4d4f" : drawingSlope ? roofColor(activeSlopePlane) : nextRoofColor(drawnPlanes);
       const DraftOverlay = drawingSlope ? google.maps.Polyline : google.maps.Polygon;
       const draft = new DraftOverlay({
         map,
         ...(drawingSlope ? { path: draftPoints } : { paths: draftPoints }),
         clickable: false,
-        strokeColor: drawingSlope ? "#7dd3fc" : drawingObstacle ? "#ff4d4f" : "#ffffff",
+        strokeColor: draftColor,
         strokeOpacity: 1,
         strokeWeight: 3 / magnification,
-        fillColor: drawingObstacle ? "#ff4d4f" : "#0f766e",
+        fillColor: draftColor,
         fillOpacity: !drawingSlope && draftPoints.length >= 3 ? 0.3 : 0,
       });
       overlaysRef.current.push(draft);
@@ -1366,7 +1381,7 @@ export function RoofStep({
             selectedVertex?.source === "draft" &&
               selectedVertex.pointIndex === pointIndex,
             "#ffffff",
-            drawingSlope ? "#0284c7" : drawingObstacle ? "#ff4d4f" : "#0f766e",
+            draftColor,
             magnification,
           ),
         });
@@ -1656,6 +1671,7 @@ export function RoofStep({
     let plane = updatePlaneArea({
       id: newId("plane"),
       label,
+      color: nextRoofColor(drawnPlanes),
       polygon: mapPolygonToMetric(draftPoints),
       mapPolygon: draftPoints,
       areaM2: 0,
@@ -1723,18 +1739,6 @@ export function RoofStep({
             overlaysRef={overlaysRef}
             ready={mapReady}
             magnification={magnification}
-          />
-          <MapZoomControls
-            magnification={magnification}
-            ready={mapReady}
-            showVertexHint={!preview}
-            onChange={(mapMagnification) => update((p) => ({
-              ...p, roof: { ...p.roof, mapMagnification },
-            }))}
-            onRecenter={() => project.location && roofMapRef.current?.setCenter({
-              lat: project.location.latitude,
-              lng: project.location.longitude,
-            })}
           />
           <button
             type="button"
@@ -1836,7 +1840,7 @@ export function RoofStep({
                 </p>
               ) : (
                 drawnPlanes.map((plane, planeIndex) => (
-                  <div className="plane-row" key={plane.id}>
+                  <div className="plane-row" key={plane.id} style={roofPlaneStyle(plane)} data-usable={plane.usable}>
                     <button
                       type="button"
                       onClick={() =>
@@ -1902,10 +1906,9 @@ export function RoofStep({
                     setPreview(true);
                   }}
                 >
-                  Mostra disposizione automatica
+                  Vedi i pannelli
                 </button>
                 <div className="roof-optional-settings">
-                  <p className="roof-optional-caption">Opzioni facoltative</p>
                   <button
                     type="button"
                     id="roof-pitch-toggle"
@@ -2122,6 +2125,17 @@ export function RoofStep({
             )}
               </>
             )}
+            <MapZoomControls
+              magnification={magnification}
+              ready={mapReady}
+              onChange={(mapMagnification) => update((p) => ({
+                ...p, roof: { ...p.roof, mapMagnification },
+              }))}
+              onRecenter={() => project.location && roofMapRef.current?.setCenter({
+                lat: project.location.latitude,
+                lng: project.location.longitude,
+              })}
+            />
           </aside>
         </div>
       </div>
@@ -2156,7 +2170,7 @@ export function RoofStep({
             Apri “Suddivisioni interne” per indicare le separazioni della falda.
           </li>
           <li>
-            Visualizza la disposizione automatica, verifica la capacità stimata e continua ai consumi.
+            Premi “Vedi i pannelli”, verifica la capacità stimata e continua ai consumi.
           </li>
         </ol>
       </div>
@@ -2169,11 +2183,16 @@ export function RoofStep({
   );
 }
 
-function ConsumptionStep({ project, update }: StepProps) {
+export function ConsumptionStep({ project, update, onBack, onContinue, onSave }: StepProps & { onBack: () => void; onContinue: () => void; onSave: () => void }) {
   const e = project.currentHome.electricityInput;
+  const [guided, setGuided] = useState(true);
+  if (guided) return <ConsumptionWizard project={project} update={update} onManual={() => setGuided(false)} onBack={onBack} onContinue={onContinue} />;
   return (
-    <section>
+    <section className="consumption-manual">
       <h1>Consumi attuali</h1>
+      <p>Inserisci i consumi della bolletta o modifica i valori stimati.</p>
+      <button type="button" className="consumption-text-button" onClick={() => setGuided(true)}>Non conosco i consumi: aiutami a stimarli →</button>
+      {e.qualityFlags.includes(HOUSEHOLD_ESTIMATE_FLAG) && <p className="consumption-note" role="status">Stai usando una stima indicativa delle tue abitudini. Puoi sostituirla con i dati della bolletta.</p>}
       <div className="form">
         <label>
           Modalità
@@ -2187,6 +2206,8 @@ function ConsumptionStep({ project, update }: StepProps) {
                   electricityInput: {
                     ...p.currentHome.electricityInput,
                     mode: ev.target.value as "annual" | "monthly" | "hourly",
+                    qualityFlags: p.currentHome.electricityInput.qualityFlags.filter(flag => flag !== HOUSEHOLD_ESTIMATE_FLAG),
+                    estimateAnswers: undefined,
                   },
                 },
               }))
@@ -2194,7 +2215,7 @@ function ConsumptionStep({ project, update }: StepProps) {
           >
             <option value="annual">Veloce: annuo</option>
             <option value="monthly">Precisa: mensile</option>
-            <option value="hourly">Dettagliata: oraria</option>
+            {e.hourlyKwh?.length === 8760 && <option value="hourly">Dettagliata: oraria (dati importati)</option>}
           </select>
         </label>
         {e.mode === "annual" && (
@@ -2211,6 +2232,8 @@ function ConsumptionStep({ project, update }: StepProps) {
                     electricityInput: {
                       ...p.currentHome.electricityInput,
                       annualKwh: +ev.target.value,
+                      qualityFlags: p.currentHome.electricityInput.qualityFlags.filter(flag => flag !== HOUSEHOLD_ESTIMATE_FLAG),
+                      estimateAnswers: undefined,
                     },
                   },
                 }))
@@ -2239,6 +2262,8 @@ function ConsumptionStep({ project, update }: StepProps) {
                         electricityInput: {
                           ...p.currentHome.electricityInput,
                           monthlyKwh: m,
+                          qualityFlags: p.currentHome.electricityInput.qualityFlags.filter(flag => flag !== HOUSEHOLD_ESTIMATE_FLAG),
+                          estimateAnswers: undefined,
                         },
                       },
                     };
@@ -2317,33 +2342,21 @@ function ConsumptionStep({ project, update }: StepProps) {
           />
         </label>
       </div>
+      <div className="actions">
+        <button type="button" onClick={onBack}>Indietro</button>
+        <button type="button" onClick={onSave}><Save size={16} /> Salva</button>
+        <button type="button" className="yellow" onClick={onContinue}>Continua alla casa futura →</button>
+      </div>
     </section>
   );
 }
 
-function FutureStep({ project, update }: StepProps) {
+function FutureStep({ project, update, config }: StepProps & { config: AppConfig }) {
   const f = project.futureHome;
-  const currentKwh =
-    project.currentHome.electricityInput.annualKwh ??
-    project.currentHome.electricityInput.monthlyKwh?.reduce(
-      (a, b) => a + b,
-      0,
-    ) ??
-    0;
-  const futureKwh = Math.round(
-    currentKwh +
-      (f.heatPumpEnabled
-        ? (project.currentHome.heating.gasSmcYear ?? 0) * 3
-        : 0) +
-      (f.electricHotWaterEnabled ? project.currentHome.occupants * 520 : 0) +
-      (f.inductionEnabled ? project.currentHome.occupants * 150 : 0) +
-      (project.mobility.evEnabled
-        ? ((project.mobility.futureEv.kmYear *
-            project.mobility.futureEv.consumptionKwh100km) /
-            100) *
-          project.mobility.futureEv.homeChargingShare
-        : 0),
-  );
+  const currentKwh = hourlyFromElectricityInput(project.currentHome.electricityInput, project.currentHome.occupancyProfile, config).reduce((total, value) => total + value, 0);
+  const extraKwh = futureHomeExtraLoads(project.currentHome, f, config).reduce((total, value) => total + value, 0);
+  const evKwh = evHomeLoad(project.mobility, config).reduce((total, value) => total + value, 0);
+  const futureKwh = Math.round(currentKwh + extraKwh + evKwh);
   return (
     <section className="future-step visual-future">
       <div className="future-hero">
@@ -2631,84 +2644,6 @@ function MobilityStep({ project, update }: StepProps) {
     </section>
   );
 }
-
-function TariffsStep({ project, update, config }: StepProps) {
-  const t = project.tariffs;
-  return (
-    <section>
-      <h1>Prezzi e assunzioni</h1>
-      <div className="form">
-        {tariffFields.map(([k, l]) => (
-          <label key={k}>
-            {l}
-            <input
-              type="number"
-              step="0.01"
-              value={t[k]}
-              onChange={(e) =>
-                update((p) => ({
-                  ...p,
-                  tariffs: { ...p.tariffs, [k]: +e.target.value },
-                }))
-              }
-            />
-          </label>
-        ))}
-        <label>
-          Costo PV manuale
-          <input
-            type="number"
-            value={t.pvCostOverride ?? ""}
-            onChange={(e) =>
-              update((p) => ({
-                ...p,
-                tariffs: {
-                  ...p.tariffs,
-                  pvCostOverride: e.target.value ? +e.target.value : undefined,
-                },
-              }))
-            }
-          />
-        </label>
-        <label>
-          Costo batteria manuale
-          <input
-            type="number"
-            value={t.batteryCostOverride ?? ""}
-            onChange={(e) =>
-              update((p) => ({
-                ...p,
-                tariffs: {
-                  ...p.tariffs,
-                  batteryCostOverride: e.target.value
-                    ? +e.target.value
-                    : undefined,
-                },
-              }))
-            }
-          />
-        </label>
-      </div>
-      <details>
-        <summary>Formule</summary>
-        <p>
-          costo_PV = {config!.pv.installationCost.fixedEur} + kWp ×{" "}
-          {config!.pv.installationCost.variableEurPerKwp}
-        </p>
-        <p>
-          costo_batteria = {config!.battery.cost.fixedEur} + kWh ×{" "}
-          {config!.battery.cost.variableEurPerKwh}
-        </p>
-      </details>
-    </section>
-  );
-}
-const tariffFields: Array<[keyof Project["tariffs"], string]> = [
-  ["gridPurchaseEurKwh", "Energia acquistata €/kWh"],
-  ["exportEurKwh", "Energia immessa €/kWh"],
-  ["gasEurSmc", "Gas €/Smc"],
-  ["fuelEurLiter", "Carburante €/l"],
-];
 
 function ResultsStep({
   project,

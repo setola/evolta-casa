@@ -1,5 +1,6 @@
 import type { AppConfig, Project, ScenarioObjective, ScenarioResult } from '../types';
 import { hourlyFromElectricityInput } from './consumption';
+import { HOUSEHOLD_ESTIMATE_FLAG } from './householdEstimate';
 import { futureHomeExtraLoads, evHomeLoad } from './electrification';
 import { economics } from './economics';
 import { hourlyPvProduction } from './solar';
@@ -38,6 +39,7 @@ function buildResult(project: Project, cfg: AppConfig, pv: number[], load: numbe
   const monthlyAggregates = Array.from({length:12},(_,m)=>({month:m+1,pv:0,load:0,import:0,export:0}));
   flows.forEach((f,i)=>{ const m=monthlyAggregates[monthForHour(i)]; m.pv+=f.pv; m.load+=f.load; m.import+=f.gridImport; m.export+=f.gridExport; });
   const warnings = ['Non include ombre locali: serve verifica professionale.', 'Dati solari sintetici: risultato orientativo.'];
+  if (project.currentHome.electricityInput.qualityFlags.includes(HOUSEHOLD_ESTIMATE_FLAG)) warnings.push(`${HOUSEHOLD_ESTIMATE_FLAG}: confronta la stima con una bolletta quando disponibile.`);
   if (project.roof.manualCapacityOverride) warnings.push('Capacità pannelli forzata: geometria non verificata.');
   const confidence = confidenceLevel(project);
   return { objective: 'minBill', pvConfiguration: { kwp, panelCount: panels, planes: project.roof.planes.filter(p=>p.usable).map(p=>p.label) }, batteryConfiguration: { capacityKwh: batteryKwh }, hourlyFlows: flows, monthlyAggregates, annualMetrics: { pvKwh, loadKwh, directSelfKwh, batteryThroughputKwh, gridImportKwh, gridExportKwh, selfConsumptionPct: pvKwh ? (directSelfKwh + batteryThroughputKwh) / pvKwh * 100 : 0, selfSufficiencyPct: loadKwh ? (loadKwh-gridImportKwh)/loadKwh*100 : 0 }, economics: eco, explanationTokens: explanation(kwp,batteryKwh,eco.savings,eco.paybackYears), warnings, confidence, score: 0 };

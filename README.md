@@ -1,8 +1,30 @@
 # Evolta Casa
 
-> **In sviluppo — pre-release.** La prima versione funzionante non è ancora stata rilasciata.
+> **Versione sperimentale.** Le simulazioni sono stime orientative, non un progetto tecnico o un preventivo.
 
-Il branch predefinito `develop` contiene il lavoro in corso. Non rappresenta una versione stabile né un rilascio pronto per la produzione.
+Il sito è distribuito da `main` su **https://setola.github.io/evolta-casa/**. Il branch predefinito `develop` contiene il lavoro in corso; solo i push su `main` avviano automaticamente il rilascio pubblico.
+
+## Rilascio su GitHub Pages
+
+Il workflow `.github/workflows/pages.yml` esegue `npm ci`, test e build in un container con la stessa immagine Node di Compose, poi pubblica **solo `dist/`** con le azioni ufficiali Pages. Non occorrono branch `gh-pages`, token personali o backend.
+
+1. Su GitHub aprire **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+2. Per Google Maps/Places, aggiungere le variabili repository in **Settings → Secrets and variables → Actions → Variables**: `VITE_GOOGLE_MAPS_API_KEY` e, se necessarie, `VITE_GOOGLE_MAPS_PLACES_API_KEY` / `VITE_GOOGLE_MAPS_JS_API_KEY`. Sono chiavi browser pubbliche: limitarne API e referrer HTTPS in Google Cloud (per esempio `https://setola.github.io/*`). Senza chiavi il sito parte, ma Maps/Places non sono disponibili.
+3. Portare le modifiche su `main`: ogni push esegue test e deploy. Per una prima anteprima da `develop`, usare **Actions → Deploy GitHub Pages → Run workflow**, selezionando `develop`; il workflow deve essere presente sul branch predefinito. Se l'environment `github-pages` limita i branch, autorizzare anche quello selezionato.
+4. Controllare l'esito dei job e aprire l'URL restituito dal deploy: normalmente **https://setola.github.io/evolta-casa/**.
+
+Il percorso base e l'origine della sitemap sono ricavati dalla configurazione Pages, anche per un dominio personalizzato. Navigazione, asset, configurazione e PWA rispettano il sottopercorso; le route note e le pagine SEO hanno un proprio `index.html`, quindi sono accessibili direttamente e dopo reload. Gli URL sconosciuti restituiscono il 404 di Pages. Le pagine SEO restano governate dallo YAML pubblico.
+
+Verificare dopo il rilascio home, `/evolta-casa/consumi/`, `/evolta-casa/prezzi/`, il vecchio `/evolta-casa/pannelli/`, navigazione avanti/indietro e installazione PWA. Esportare i progetti prima di cambiare origine: lo storage locale non viene trasferito dal sito LAN a GitHub Pages.
+
+Per riprodurre la build Pages localmente, a servizi fermi e dopo la preparazione Docker:
+
+```sh
+docker compose run --rm -e BASE_PATH=/evolta-casa/ -e SITE_URL=https://setola.github.io/evolta-casa npm run build
+docker compose run --rm --publish 4173:4173 -e BASE_PATH=/evolta-casa/ npm run preview -- --port 4173 --strictPort
+```
+
+Aprire `http://<DEV_HOST>:4173/evolta-casa/`. Senza queste variabili la build resta utilizzabile alla radice `/`. Le chiavi pubbliche vanno fornite durante la build, non al server di preview.
 
 ## Ambiente Docker-only
 
@@ -10,7 +32,7 @@ Prerequisiti sull'host: Docker con Compose v2 e una shell con utility standard. 
 
 Toolchain: React, TypeScript, Vite e Vitest. Tutti i comandi girano in `/app`, corrispondente alla radice del repository. `src/` contiene applicazione e test dei motori; `public/` contiene asset, service worker e configurazione; `scripts/generate-sitemap.mjs` completa la build in `dist/`.
 
-Si usa l'immagine ufficiale `node:26.13.0-bookworm-slim`, fissata tramite digest in `compose.yaml`: Node 26.13.0 è la LTS Lithium, verificata nell'[indice ufficiale delle release](https://nodejs.org/dist/index.json). Il requisito `engines.node ^26.13.0` del manifest è allineato alla linea LTS scelta e soddisfa la toolchain risolta. Le dipendenze dichiarate come `latest` nel manifest sono risolte in `package-lock.json`: l'installazione riproducibile usa **`npm ci`**, senza aggiornare il lockfile. Nessuna immagine personalizzata è necessaria.
+Si usa l'immagine ufficiale `node:26.13.0-bookworm-slim`, fissata tramite digest in `compose.yaml`: Node 26.13.0 è la LTS Lithium, verificata nell'[indice ufficiale delle release](https://nodejs.org/dist/index.json). Il requisito `engines.node ^26.13.0` del manifest è allineato alla linea LTS scelta e soddisfa la toolchain risolta. Le dipendenze dichiarano intervalli di versione espliciti nel manifest e sono risolte in `package-lock.json`: l'installazione riproducibile usa **`npm ci`**, senza aggiornare il lockfile. Nessuna immagine personalizzata è necessaria.
 
 ### Preparazione iniziale
 
@@ -112,9 +134,9 @@ Il browser usa Internet per Google Maps/Places, Nominatim/OpenStreetMap (ricerca
 
 ## Tetto e disposizione automatica
 
-Il percorso è **Trova casa → Tetto → Consumi → Casa futura → Mobilità → Prezzi → Risultati**: non c’è più uno step Pannelli separato. Nello step Tetto si disegnano i perimetri e si assegna il **Nome della falda** (precompilato “Falda N”, massimo 80 caratteri; un nome vuoto blocca il salvataggio). I nomi restano modificabili nell’elenco, senza alterare geometria o disposizione. La CTA testuale **Disegna la prima falda** appare solo a elenco vuoto; dopo il primo disegno si usa il pulsante **+** accanto al titolo per aggiungerne altre e il **−** su ciascuna riga per eliminarla. Le icone hanno tooltip ed etichette accessibili; eliminando l’ultima falda ricompare la CTA iniziale. **Inclinazione del tetto**, **Ostacoli sul tetto** e **Suddivisioni interne** sono accordion facoltativi inizialmente chiusi. Chiudere un editor o cambiare la falda scarta solo la relativa bozza; i dati salvati rimangono nel progetto.
+Il percorso è **Trova casa → Tetto → Consumi → Casa futura → Mobilità → Risultati**: non c’è più uno step Pannelli separato. Nello step Tetto si disegnano i perimetri e si assegna il **Nome della falda** (precompilato “Falda N”, massimo 80 caratteri; un nome vuoto blocca il salvataggio). I nomi restano modificabili nell’elenco, senza alterare geometria o disposizione. Ogni falda riceve un colore distinto, condiviso tra contorno/vertici sulla mappa e bordo/sfondo sfumato delle righe in modifica e preview. Il campo opzionale `RoofPlane.color` viene salvato nel progetto: rinomina, eliminazione di altre falde e ricarica non cambiano il colore; i vecchi progetti ricevono automaticamente colori univoci. La CTA testuale **Disegna la prima falda** appare solo a elenco vuoto; dopo il primo disegno si usa il pulsante **+** accanto al titolo per aggiungerne altre e il **−** su ciascuna riga per eliminarla. Le icone hanno tooltip ed etichette accessibili; eliminando l’ultima falda ricompare la CTA iniziale. Gli ostacoli seguono lo stesso schema per la falda selezionata: CTA testuale per il primo, poi **+** accanto alla scelta del tipo e **−** su ogni ostacolo salvato; eliminando l’ultimo ricompare la CTA testuale. **Inclinazione del tetto**, **Ostacoli sul tetto** e **Suddivisioni interne** sono accordion facoltativi inizialmente chiusi. Chiudere un editor o cambiare la falda scarta solo la relativa bozza; i dati salvati rimangono nel progetto.
 
-**Mostra disposizione automatica** apre la preview sulla stessa mappa: per ogni falda il sistema confronta una griglia portrait e una landscape e sceglie quella con più moduli (parità → portrait). Mostra numero di pannelli e kWp come **capacità massima stimata**, non come taglia economicamente consigliata: quella viene scelta dalla simulazione sui consumi. Non si aggiungono/rimuovono singoli pannelli e non si sceglie manualmente l’orientamento. **Modifica superfici** torna ai perimetri e agli ostacoli; **Continua ai consumi** conferma le superfici e passa direttamente a `/consumi`. Se la capacità è zero, occorre correggere le superfici prima di continuare. I layout dei progetti precedenti vengono ricalcolati all’apertura dell’editor e prima di una nuova simulazione; nomi, perimetri, ostacoli, `slopeLines` e zoom sono preservati.
+**Vedi i pannelli** apre la preview sulla stessa mappa: per ogni falda il sistema confronta una griglia portrait e una landscape e sceglie quella con più moduli (parità → portrait). Mostra numero di pannelli e kWp come **capacità massima stimata**, non come taglia economicamente consigliata: quella viene scelta dalla simulazione sui consumi. Non si aggiungono/rimuovono singoli pannelli e non si sceglie manualmente l’orientamento. **Modifica superfici** torna ai perimetri e agli ostacoli; **Continua ai consumi** conferma le superfici e passa direttamente a `/consumi`. Se la capacità è zero, occorre correggere le superfici prima di continuare. I layout dei progetti precedenti vengono ricalcolati all’apertura dell’editor e prima di una nuova simulazione; nomi, perimetri, ostacoli, `slopeLines` e zoom sono preservati.
 
 ### Geometria della stima
 
@@ -122,13 +144,31 @@ Le dimensioni fisiche del modulo restano quelle configurate (1,13 × 1,76 m, 450
 
 ### Zoom e compatibilità
 
-L’editor apre la vista a **2×**, oppure allo zoom salvato. La scelta **1× / 2× / 4×** rimane invariata passando dalla modifica alla preview e tornando dai consumi; `roof.mapMagnification` è inclusa in bozza ed esportazione (default 2× nei vecchi progetti). Lo zoom non aggiunge dettaglio fotografico né modifica geometrie. Logo, attribuzioni e controlli nativi Google mantengono la dimensione originale senza essere copiati, nascosti o privati dei link; sui viewport piccoli la loro visibilità resta gestita da Google. Trascinare lo sfondo sposta la vista; **Ricentra** torna alla posizione confermata. In modifica i punti di falde e ostacoli restano selezionabili, trascinabili ed eliminabili a ogni zoom anche con gli accordion chiusi; la preview non permette di manipolare i moduli. Non vengono salvate copie delle immagini Google.
+Lo zoom è una riga discreta nel fondo della card delle falde, separata da “Suddivisioni interne” da una sola linea e disponibile sia in modifica sia in preview: non c’è più un pannello zoom flottante sulla mappa. L’editor apre la vista a **2×**, oppure allo zoom salvato. La scelta **1× / 2× / 4×** rimane invariata passando dalla modifica alla preview e tornando dai consumi; `roof.mapMagnification` è inclusa in bozza ed esportazione (default 2× nei vecchi progetti). Lo zoom non aggiunge dettaglio fotografico né modifica geometrie. Logo, attribuzioni e controlli nativi Google mantengono la dimensione originale senza essere copiati, nascosti o privati dei link; sui viewport piccoli la loro visibilità resta gestita da Google. Trascinare lo sfondo sposta la vista; **Ricentra** torna alla posizione confermata. In modifica i punti di falde e ostacoli restano selezionabili, trascinabili ed eliminabili a ogni zoom anche con gli accordion chiusi; la preview non permette di manipolare i moduli. Non vengono salvate copie delle immagini Google.
 
 Il vecchio URL `/pannelli` (anche con slash finale) viene normalizzato a `/tetto`, conservando query e hash, sia al caricamento sia tramite cronologia browser. La build continua a generare la relativa pagina statica per evitare 404 sui vecchi bookmark, ma lo step non compare nel wizard.
 
 ### Verifica manuale
 
 Con Google Maps configurato: disegnare/nominare falde, ostacoli e separazioni; inserire, spostare ed eliminare punti a 1×/2×/4×; aprire la preview e controllare i footprint proiettati, tornare alla modifica, poi continuare direttamente ai consumi. Verificare persistenza dopo reload/ritorno al tetto e apertura del vecchio `/pannelli`. Ripetere su schermo stretto con input touch. I test automatici coprono geometria, scelta del layout, preview, routing e gesti simulati; il rendering live richiede comunque la verifica browser. `RoofMapViewport` compensa anche lo scarto fra centro della proiezione Maps e centro del canvas non scalato.
+
+## Stima guidata dei consumi
+
+La pagina `/consumi` propone prima un percorso in tre passaggi: persone/superficie/presenza, dotazioni attuali, riepilogo. **Ho già i consumi** apre subito l’inserimento manuale senza modificare il progetto. Le risposte restano una bozza locale al componente fino a **Usa questa stima**; la conferma salva un consumo annuo e le risposte nel progetto, elimina eventuali serie elettriche precedenti e invalida i risultati. La conferma porta direttamente a Casa futura, senza mostrare il modulo manuale. Wizard e inserimento manuale sono percorsi alternativi: il modulo si apre esclusivamente dal link **Ho già i consumi**, anche tornando sulla pagina dopo una stima salvata. Cambiare il consumo o la modalità rimuove l’indicazione di stima domestica. Le dotazioni future e l’auto non sono incluse.
+
+Il modello orientativo è in `src/engines/householdEstimate.ts`: base di 1.000 kWh/anno più 350 per persona (frigorifero, lavatrice, luci e piccoli apparecchi inclusi); lavastoviglie 100 + 50 per persona, asciugatrice 100 per persona, raffrescamento 5 per m², acqua calda elettrica tradizionale 520 per persona, induzione 150 per persona. Riscaldamento: pompa di calore 30 per m², resistenze 90 per m². Totale arrotondato a 50 kWh. Sono coefficienti semplificati, non dati misurati né una replica del modello Segugio: non considerano clima, classe energetica o frequenze individuali. La presenza distribuisce i consumi nelle ore, senza cambiare il totale. Il gas non viene stimato e va verificato in bolletta. I risultati segnalano esplicitamente quando il consumo elettrico deriva da questo modello.
+
+Test dedicati: `src/engines/householdEstimate.test.ts` e `src/ui/ConsumptionStep.test.tsx`. Verifica manuale consigliata su desktop e telefono: completare il wizard, tornare tra passaggi, saltarlo, confermare e correggere il valore, ricaricare il progetto, verificare la navigazione verso Casa futura.
+
+## Prezzi e assunzioni per esperti
+
+`/prezzi` è accessibile dal link discreto nel footer, non più dal menu numerato. Da Mobilità si passa direttamente ai risultati; tornare indietro dai risultati riapre Mobilità. La pagina contiene tabelle contestuali con valore, unità e uso: tariffe/costi manuali, investimento, modulo e tetto, produzione solare, batteria, profili domestici, elettrificazione, ricarica e ottimizzazione. Riporta inoltre dati effettivi del progetto e costanti fisse del motore in sola lettura, compresi limiti e configurazioni attualmente non utilizzate.
+
+L’avviso invita a modificare i valori solo se esperti. **Applica modifiche** valida atomicamente numeri, quote, lunghezze e somme dei vettori (liste JSON), salva tariffe e override tecnici nel progetto e invalida i risultati. **Calcola scenari** applica la configurazione effettiva anche al nuovo layout FV. Il prezzo mobilità mostrato è quello realmente usato da `currentVehicle.price`, non il solo prezzo di riferimento iniziale. Il riepilogo Casa futura usa gli stessi coefficienti dei motori.
+
+`Project.assumptionOverrides` conserva solo differenze rispetto al modello base: sono incluse nella bozza, nel salvataggio locale e nell’export/import JSON. Non modificano lo YAML né altri progetti. Il risolutore in `src/assumptions.ts` accetta solo i percorsi censiti e valori validi; i vecchi progetti senza override continuano a usare lo YAML. **Ripristina parametri tecnici predefiniti** prepara il ripristino, da confermare con Applica; tariffe e costi manuali rimangono invariati. Le costanti del wizard restano indipendenti dagli override di elettrificazione futura.
+
+Test: `src/assumptions.test.ts` e `src/ui/TariffsPage.test.tsx` coprono validazione, isolamento, export/import, applicazione al motore, modifica/ripristino e navigazione. Verifica manuale consigliata su desktop e telefono: link nel footer, scorrimento tabelle, modifica/applicazione/ricalcolo, ricarica della bozza e ritorno a Mobilità dai risultati.
 
 ## File generati, cache e dati
 
@@ -141,9 +181,9 @@ Con Google Maps configurato: disegnare/nominare falde, ostacoli e separazioni; i
 
 ## PWA e verifica manuale
 
-L'app registra `/sw.js` e usa un manifest alla root; l'offline è parziale, non include i servizi esterni. Su **localhost HTTP** il browser consente service worker e altre funzioni secure-context. Verificare il comportamento production-like con la build e la preview sopra, all'origine `http://localhost:4173`, distinta da quella di sviluppo. Non sono configurati test browser automatici.
+La build di produzione registra `sw.js` e usa un manifest relativi al percorso base; il server di sviluppo non registra nuovi worker. L'offline è parziale, non include i servizi esterni né garantisce il primo avvio senza rete. Su **localhost HTTP** il browser consente service worker e altre funzioni secure-context. Verificare il comportamento production-like con la build e la preview sopra, all'origine `http://localhost:4173`, distinta da quella di sviluppo. Non sono configurati test browser automatici.
 
-Per evitare asset obsoleti in sviluppo: DevTools → Application → Service Workers → Unregister e Cache Storage → eliminare `evolta-casa-v1`, poi ricaricare. Il restart dei container non resetta il browser. Prima di usare “Clear site data” esportare i progetti: quella funzione elimina anche IndexedDB/localStorage.
+Per evitare asset obsoleti in sviluppo: DevTools → Application → Service Workers → Unregister e Cache Storage → eliminare le cache `evolta-casa-*`, poi ricaricare. Il restart dei container non resetta il browser. Prima di usare “Clear site data” esportare i progetti: quella funzione elimina anche IndexedDB/localStorage.
 
 ### HTTPS da PC remoto o telefono
 
@@ -162,12 +202,14 @@ HTTP LAN consente l'interfaccia normale, ma **non** service worker, installazion
 3. Caddy genera la CA e il certificato **nel container**, senza tool TLS host. Copiare dal filesystem della VM il solo certificato pubblico `.docker/caddy-data/caddy/pki/authorities/local/root.crt` sul PC/telefono tramite un canale fidato, verificandone la provenienza. Importarlo nelle autorità radice fidate del sistema/browser: in Firefox usare Impostazioni → Privacy e sicurezza → Certificati → Autorità; su iOS installare il profilo e abilitare la fiducia completa; su Android installare come certificato CA nelle impostazioni di sicurezza. I nomi dei menu variano. Non trasferire `root.key` né limitarsi a ignorare l'avviso TLS: il certificato deve risultare fidato. Rimuovere la CA dai dispositivi quando non serve più.
 4. Aprire **`https://<DEV_HOST>:8443`**, oppure la `TLS_PORT` scelta. TLS e HMR/WSS passano sulla stessa porta; il proxy non pubblica porte admin né redirect HTTP. Il certificato è valido per il solo `DEV_HOST`; per verificare un nome/IP diverso cambiare `DEV_HOST` e ricreare `web`/`https`. L'accesso HTTP diretto agli altri indirizzi resta disponibile.
 
-Controllare nel browser che `window.isSecureContext` sia `true`, il service worker si registri, non ci siano errori console e una modifica al sorgente aggiorni la pagina con WebSocket connesso (WSS per TLS). Cambiando `APP_PORT` o `TLS_PORT`, ripetere questi controlli all'URL effettivo. PWA e geolocalizzazione dipendono anche dal supporto/permessi del browser. Per test production-like del bundle resta disponibile la preview localhost descritta sopra; il proxy TLS punta al server di sviluppo, non è un deployment di produzione.
+Controllare nel browser che `window.isSecureContext` sia `true`, non ci siano errori console e una modifica al sorgente aggiorni la pagina con WebSocket connesso (WSS per TLS). Cambiando `APP_PORT` o `TLS_PORT`, ripetere questi controlli all'URL effettivo. PWA e geolocalizzazione dipendono anche dal supporto/permessi del browser. Per verificare registrazione del service worker e PWA usare la build con preview localhost descritta sopra oppure il sito HTTPS su Pages: il proxy TLS punta al server di sviluppo, che non registra nuovi service worker, e non è un deployment di produzione.
 
 `docker compose stop https` disattiva il proxy; `docker compose --profile tls down` rimuove entrambi i servizi mantenendo i dati CA. Un successivo `up -d` senza profilo non ferma un proxy già attivo: i profili non sono ambienti mutuamente esclusivi.
 
 ## CI e requisiti non applicabili
 
-Non esiste attualmente una pipeline CI. Una futura CI dovrà preparare UID/GID e `.docker/node_modules` come sopra ed eseguire gli stessi `docker compose run --rm npm ci`, `npm test` e `npm run build` (sempre tramite il servizio `npm`), senza installare Node sull'host.
+La pipeline di rilascio Pages esegue installazione riproducibile, test e build nel container Node prima del deploy. Non installa Node sul runner host e non usa i mount di sviluppo. In locale restano validi i comandi Compose descritti sopra.
+
+**Verifica sicurezza prima del rilascio pubblico:** dopo l'aggiornamento delle dipendenze, `npm audit` non segnala vulnerabilità note e `npm outdated` non segnala pacchetti superati. Ripetere `docker compose run --rm npm audit` prima di ogni rilascio: nuove segnalazioni possono emergere nel tempo. Il deploy non costituisce una certificazione di sicurezza.
 
 Non applicabili all'attuale progetto: submodule, toolchain extra (Hugo, ImageMagick ecc.), servizi dati locali, login CLI, migrazioni, cataloghi incrementali, OAuth, task lint e server/runner per test browser. I test unitari non avviano servizi dipendenti: non necessitano di un profilo test o di teardown di server e non arrestano l'app dello sviluppatore. La serializzazione manuale sopra resta necessaria per i mount condivisi.

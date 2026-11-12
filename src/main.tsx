@@ -4,13 +4,14 @@ import YAML from 'yaml';
 import { App } from './ui/App';
 import { AppConfigSchema } from './configSchema';
 import './styles.css';
+import { publicPath } from './paths';
 
 async function boot() {
-  const res = await fetch('/config/assumptions.yaml');
+  const res = await fetch(publicPath('/config/assumptions.yaml'));
   const raw = await res.text();
   const config = AppConfigSchema.parse(YAML.parse(raw));
   createRoot(document.getElementById('root')!).render(<React.StrictMode><App config={config} /></React.StrictMode>);
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => undefined);
+  if (import.meta.env.PROD && 'serviceWorker' in navigator) navigator.serviceWorker.register(publicPath('/sw.js')).catch(() => undefined);
 }
 boot().catch(err => {
   const pre = document.createElement('pre');
