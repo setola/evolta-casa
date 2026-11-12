@@ -34,10 +34,11 @@ jobs:
         env:
           BASE_PATH: ${{ steps.pages.outputs.base_path }}/
           SITE_URL: ${{ steps.pages.outputs.base_url }}
-          # Public browser keys: restrict their APIs and HTTP referrers in Google Cloud.
-          VITE_GOOGLE_MAPS_API_KEY: ${{ vars.VITE_GOOGLE_MAPS_API_KEY }}
-          VITE_GOOGLE_MAPS_PLACES_API_KEY: ${{ vars.VITE_GOOGLE_MAPS_PLACES_API_KEY }}
-          VITE_GOOGLE_MAPS_JS_API_KEY: ${{ vars.VITE_GOOGLE_MAPS_JS_API_KEY }}
+          # Repository secrets take precedence; Variables remain a supported fallback.
+          # These browser keys are bundled publicly: restrict APIs and HTTP referrers.
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY || vars.VITE_GOOGLE_MAPS_API_KEY }}
+          VITE_GOOGLE_MAPS_PLACES_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_PLACES_API_KEY || vars.VITE_GOOGLE_MAPS_PLACES_API_KEY }}
+          VITE_GOOGLE_MAPS_JS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_JS_API_KEY || vars.VITE_GOOGLE_MAPS_JS_API_KEY }}
       - name: Upload site
         uses: actions/upload-pages-artifact@v3
         with:
