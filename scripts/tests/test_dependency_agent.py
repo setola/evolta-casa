@@ -50,6 +50,30 @@ class PolicyTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertIsNone(agent.policy_error(path, WORKFLOW, updated))
 
+    def test_named_step_action_versions_are_normalized(self):
+        old = WORKFLOW.replace(
+            "      - uses: actions/checkout@v4",
+            "      - name: Read Pages configuration\n"
+            "        id: pages\n"
+            "        uses: actions/configure-pages@v5",
+        )
+        updated = old.replace("configure-pages@v5", "configure-pages@v6")
+        for path in agent.WORKFLOWS:
+            with self.subTest(path=path):
+                self.assertIsNone(agent.policy_error(path, old, updated))
+                for before, after in (
+                    ("actions/configure-pages", "attacker/configure-pages"),
+                    ("Read Pages configuration", "Different name"),
+                    ("id: pages", "id: other"),
+                    ("contents: read", "contents: write"),
+                    ("npm test", "true"),
+                    ("uses:", "- uses:"),
+                ):
+                    with self.subTest(before=before):
+                        self.assertIsNotNone(agent.policy_error(
+                            path, old, updated.replace(before, after),
+                        ))
+
     def test_normalization_preserves_comments_and_nonversion_content(self):
         old = "- uses: actions/checkout@v4 # trusted\n"
         new = "- uses: actions/checkout@v5 # untrusted\n"

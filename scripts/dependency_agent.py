@@ -89,7 +89,7 @@ def normalize_yaml(text, actions=False):
     for line, structural in yaml_lines(text):
         if structural:
             if actions:
-                line = re.sub(r"^(\s*-\s*uses:\s+[\w./-]+)@[\w.\-]+(\s*(?:#.*)?)$",
+                line = re.sub(r"^(\s*(?:-\s*)?uses:\s+[\w./-]+)@[\w.\-]+(\s*(?:#.*)?)$",
                               r"\1@VERSION\2", line)
             match = re.fullmatch(r"(\s*image:\s*)([\w./:@\-]+)(\s*(?:#.*)?)", line)
             if match:
