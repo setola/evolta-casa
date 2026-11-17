@@ -21,7 +21,7 @@ jobs:
       contents: read
       pages: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Read Pages configuration
         id: pages
         uses: actions/configure-pages@v5
