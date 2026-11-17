@@ -26,6 +26,18 @@ docker compose run --rm --publish 4173:4173 -e BASE_PATH=/evolta-casa/ npm run p
 
 Aprire `http://<DEV_HOST>:4173/evolta-casa/`. Senza queste variabili la build resta utilizzabile alla radice `/`. Le chiavi pubbliche vanno fornite durante la build, non al server di preview.
 
+## Aggiornamenti con Dependabot
+
+`.github/dependabot.yml` controlla ogni lunedì alle 08:00 (`Europe/Rome`) dipendenze npm, GitHub Actions e immagini in `compose.yaml`. Non richiede installazioni, token o dipendenze aggiuntive. La configurazione diventa attiva quando viene pubblicata sul branch predefinito **`develop`**; le PR di aggiornamento puntano a quel branch, senza distribuire automaticamente su `main`.
+
+- Gli aggiornamenti npm minor/patch sono raggruppati; i major restano PR separate. Il limite è di 5 PR di versione aperte per ecosistema (non limita le PR di sicurezza).
+- Il workflow `.github/workflows/ci.yml` esegue `npm ci`, test e build con il sottopercorso Pages su tutte le PR e sui push a `develop`, senza segreti né permessi di deploy. Le PR Dependabot hanno permessi limitati: non usare `pull_request_target` per eseguire il loro codice con credenziali privilegiate.
+- Le immagini Compose sono aggiornate separatamente dalle dipendenze npm. Quando cambia Node, verificare e allineare anche `engines.node` in `package.json`, le immagini container in **entrambi** i workflow e la documentazione. Non assumere che un aggiornamento Compose sincronizzi queste copie.
+- In **Settings → Advanced Security** verificare che **Dependency graph**, **Dependabot alerts** e **Dependabot security updates** siano abilitati (su alcune interfacce sono sotto **Code security**). Gli aggiornamenti di sicurezza sono indipendenti dal calendario settimanale.
+- Nessun auto-merge è configurato. Prima di automatizzare la gestione delle PR, rendere obbligatorio il check **Test and build** tramite ruleset/protezione di `develop`; un futuro agente dovrà lavorare su un branch isolato, ripetere test/build e richiedere revisione per major, modifiche ai workflow e aggiornamenti del runtime. Il merge e il rilascio rimangono decisioni esplicite.
+
+Riferimento: [configurazione ufficiale Dependabot](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/secure-your-dependencies/configure-version-updates).
+
 ## Ambiente Docker-only
 
 Prerequisiti sull'host: Docker con Compose v2 e una shell con utility standard. Non occorrono Node, npm o browser per test automatici sull'host. Un browser locale serve per l'uso manuale.
