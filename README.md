@@ -44,7 +44,7 @@ Prerequisiti sull'host: Docker con Compose v2 e una shell con utility standard. 
 
 Toolchain: React, TypeScript, Vite e Vitest. Tutti i comandi girano in `/app`, corrispondente alla radice del repository. `src/` contiene applicazione e test dei motori; `public/` contiene asset, service worker e configurazione; `scripts/generate-sitemap.mjs` completa la build in `dist/`.
 
-Si usa l'immagine ufficiale `node:26.13.0-bookworm-slim`, fissata tramite digest in `compose.yaml`: Node 26.13.0 è la LTS Lithium, verificata nell'[indice ufficiale delle release](https://nodejs.org/dist/index.json). Il requisito `engines.node ^26.13.0` del manifest è allineato alla linea LTS scelta e soddisfa la toolchain risolta. Le dipendenze dichiarano intervalli di versione espliciti nel manifest e sono risolte in `package-lock.json`: l'installazione riproducibile usa **`npm ci`**, senza aggiornare il lockfile. Nessuna immagine personalizzata è necessaria.
+Si usa l'immagine ufficiale `node:26.13.1-bookworm-slim`, fissata tramite digest in `compose.yaml`: Node 26.13.1 è la LTS Lithium, verificata nell'[indice ufficiale delle release](https://nodejs.org/dist/index.json). Il requisito `engines.node ^26.13.1` del manifest è allineato alla linea LTS scelta e soddisfa la toolchain risolta. Le dipendenze dichiarano intervalli di versione espliciti nel manifest e sono risolte in `package-lock.json`: l'installazione riproducibile usa **`npm ci`**, senza aggiornare il lockfile. Nessuna immagine personalizzata è necessaria.
 
 ### Preparazione iniziale
 
