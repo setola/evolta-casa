@@ -1,8 +1,9 @@
 version: 2
 
-# Uses the default branch (develop) for manifests and update PRs.
+# Explicit main-only target for manifests and version update PRs.
 updates:
   - package-ecosystem: npm
+    target-branch: main
     directory: /
     schedule:
       interval: weekly
@@ -16,6 +17,7 @@ updates:
         update-types: [minor, patch]
 
   - package-ecosystem: github-actions
+    target-branch: main
     directory: /
     schedule:
       interval: weekly
@@ -25,6 +27,7 @@ updates:
     open-pull-requests-limit: 5
 
   - package-ecosystem: docker-compose
+    target-branch: main
     directory: /
     schedule:
       interval: weekly

@@ -2,8 +2,9 @@ name: CI
 
 on:
   pull_request:
+    branches: [main]
   push:
-    branches: [develop]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -15,6 +16,7 @@ concurrency:
 
 jobs:
   automation:
+    if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
     name: Automation safeguards
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -24,10 +26,12 @@ jobs:
         run: python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
 
   check:
+    if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
     name: Test and build
     runs-on: ubuntu-latest
     timeout-minutes: 15
     container:
+      # yamllint disable-line rule:line-length
       image: node:26.13.1-bookworm-slim@sha256:5df79989ed685e09f0a98019db4cebfb22fb9df1a53c0161664a011f7ff6b0f1
     steps:
       - uses: actions/checkout@v7
