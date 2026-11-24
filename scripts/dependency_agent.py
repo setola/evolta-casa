@@ -42,8 +42,10 @@ class Unsafe(Stop):
 
 
 def run(*args, cwd=None, timeout=120, capture=True):
-    result = subprocess.run(args, cwd=cwd, text=True, stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT, timeout=timeout)
+    result = subprocess.run(args, cwd=cwd, text=True, capture_output=True, timeout=timeout)
+    # Machine-readable stdout must not include CLI hints or warnings from stderr.
+    if result.stderr:
+        print(result.stderr, end="", file=sys.stderr, flush=True)
     if not capture or result.returncode:
         print(result.stdout, end="", flush=True)
     if result.returncode:

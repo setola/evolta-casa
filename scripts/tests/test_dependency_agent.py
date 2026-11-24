@@ -5,11 +5,11 @@ import copy
 import importlib.util
 import io
 import json
-from pathlib import Path
+import sys
 import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
-
 
 SCRIPT = Path(__file__).resolve().parents[1] / "dependency_agent.py"
 SPEC = importlib.util.spec_from_file_location("dependency_agent_under_test", SCRIPT)
@@ -37,9 +37,40 @@ COMPOSE = "services:\n  app:\n    image: " + IMAGE + "\n    ports: [\"8080:8080\
 def aligned_files():
     return {
         "compose.yaml": COMPOSE,
-        **{path: WORKFLOW for path in agent.WORKFLOWS},
+        **dict.fromkeys(agent.WORKFLOWS, WORKFLOW),
         "package.json": json.dumps({"engines": {"node": "^22.14.0"}}),
     }
+
+
+class CommandOutputTests(unittest.TestCase):
+    def test_api_parses_json_when_command_emits_stderr_hint(self):
+        original_run = agent.run
+        program = 'import sys; print("{\\"number\\": 8}"); print("hint: informational message", file=sys.stderr)'
+        output, diagnostics = io.StringIO(), io.StringIO()
+        with mock.patch.object(agent, "run", side_effect=lambda *args: original_run(
+            sys.executable, "-c", program,
+        )), contextlib.redirect_stdout(output), contextlib.redirect_stderr(diagnostics):
+            self.assertEqual(agent.api("repos/example/project/pulls/8"), {"number": 8})
+        self.assertEqual(output.getvalue(), "")
+        self.assertIn("hint: informational message", diagnostics.getvalue())
+
+    def test_failed_command_preserves_both_streams_and_raises(self):
+        output, diagnostics = io.StringIO(), io.StringIO()
+        with (contextlib.redirect_stdout(output), contextlib.redirect_stderr(diagnostics),
+              self.assertRaisesRegex(agent.Stop, "Command failed \\(7\\)")):
+            agent.run(sys.executable, "-c",
+                      'import sys; print("partial output"); print("failure detail", file=sys.stderr); sys.exit(7)')
+        self.assertIn("partial output", output.getvalue())
+        self.assertIn("failure detail", diagnostics.getvalue())
+
+    def test_non_capture_prints_stdout_and_returns_only_stdout(self):
+        output, diagnostics = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(output), contextlib.redirect_stderr(diagnostics):
+            result = agent.run(sys.executable, "-c",
+                               'import sys; print("result"); print("warning", file=sys.stderr)', capture=False)
+        self.assertEqual(result, "result")
+        self.assertEqual(output.getvalue(), "result\n")
+        self.assertEqual(diagnostics.getvalue(), "warning\n")
 
 
 class PolicyTests(unittest.TestCase):
@@ -379,9 +410,9 @@ class ControllerTests(ControllerTestCase):
         # Newer controllers also compare the local controller with trusted develop.
         self.git.side_effect = None
         self.git.return_value = "trusted controller"
-        with mock.patch.object(Path, "read_text", return_value="trusted controller"):
-            with self.assertRaisesRegex(agent.Stop, "differ|unrelated"):
-                self.controller.start(42)
+        with (mock.patch.object(Path, "read_text", return_value="trusted controller"),
+              self.assertRaisesRegex(agent.Stop, "differ|unrelated")):
+            self.controller.start(42)
         self.controller.pr.assert_not_called()
         self.assertFalse(any("merge" in call.args or "push" in call.args for call in self.git.call_args_list))
         self.external_run.assert_not_called()
@@ -391,7 +422,7 @@ class ControllerTests(ControllerTestCase):
         for moved in (agent.BASE, agent.PROD):
             with self.subTest(branch=moved):
                 self.operation.update(attempts=0, stage="prepared")
-                self.controller.ref.side_effect = lambda branch: "moved-sha" if branch == moved else "base-sha"
+                self.controller.ref.side_effect = lambda branch, moved=moved: "moved-sha" if branch == moved else "base-sha"
                 self.controller.finish("trusted-token")
                 self.assertEqual(self.operation["stage"], "needs-fix")
                 self.assertIn("Base branches moved", self.operation["error"])
