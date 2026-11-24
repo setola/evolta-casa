@@ -331,7 +331,7 @@ class ControllerTests(ControllerTestCase):
         for change in ({"draft": True}, {"user": {"login": "attacker", "type": "Bot"}},
                        {"user": {"login": agent.BOT, "type": "User"}},
                        {"head": {"repo": None}}, {"head": {"repo": {"full_name": "evil/repo"}}},
-                       {"base": {"ref": agent.PROD}}):
+                       {"base": {"ref": "develop"}}):
             invalid.append({**copy.deepcopy(eligible), **change, "number": len(invalid) + 1})
         self.api.side_effect = None
         self.api.return_value = [[*invalid[:3], eligible], [*invalid[3:], {**eligible, "number": 10}]]
@@ -341,6 +341,49 @@ class ControllerTests(ControllerTestCase):
             f"repos/{agent.REPO}/pulls?state=open&base={agent.BASE}&per_page=100", "--paginate", "--slurp")
         self.git.assert_not_called()
         self.external_run.assert_not_called()
+
+    def test_fetch_only_main(self):
+        self.git.side_effect = None
+        self.git.return_value = f"https://github.com/{agent.REPO}.git"
+        agent.Controller.fetch(self.controller)
+        self.assertEqual(self.git.call_args_list, [
+            mock.call(self.controller.root, "remote", "get-url", "origin"),
+            mock.call(self.controller.root, "fetch", "origin", "main"),
+        ])
+
+    def test_legacy_operation_requires_retargeted_pr_without_reset(self):
+        self.controller.pr = agent.Controller.pr.__get__(self.controller)
+        self.api.side_effect = None
+        self.api.return_value = {
+            "user": {"login": agent.BOT, "type": "Bot"},
+            "head": {"repo": {"full_name": agent.REPO}},
+            "base": {"ref": "develop"}, "draft": False,
+        }
+        self.operation["stage"] = "needs-fix"
+        self.operation["attempts"] = 1
+        self.operation["develop_ci"] = "legacy-ci"
+        self.controller.finish("trusted-token")
+        self.assertIs(self.controller.state["active"], self.operation)
+        self.assertEqual(self.operation["attempts"], 2)
+        self.assertEqual(self.operation["base"], "base-sha")
+        self.assertEqual(self.operation["develop_ci"], "legacy-ci")
+        self.assertIn("PR to main", self.operation["error"])
+        self.controller.verify.assert_not_called()
+        self.git.assert_not_called()
+        self.external_run.assert_not_called()
+        self.api.return_value["base"]["ref"] = "main"
+        self.assertEqual(self.controller.pr(42)["base"]["ref"], "main")
+
+    def test_trusted_main_controller_allows_idle_start(self):
+        self.controller.state["active"] = None
+        self.controller.candidates = mock.Mock(return_value=[])
+        self.git.side_effect = None
+        self.git.return_value = "trusted controller"
+        with mock.patch.object(Path, "read_text", return_value="trusted controller\n"):
+            self.controller.start()
+        self.git.assert_called_once_with(self.controller.root, "show", "origin/main:scripts/dependency_agent.py")
+        self.controller.candidates.assert_called_once()
+        self.controller.ref.assert_not_called()
 
     def test_no_active_operation_rejects_token(self):
         self.controller.state["active"] = None
@@ -404,28 +447,23 @@ class ControllerTests(ControllerTestCase):
         self.assertEqual(self.controller.state["history"][0]["stage"], "blocked")
         self.external_run.assert_not_called()
 
-    def test_divergent_branches_prevent_start(self):
+    def test_untrusted_controller_prevents_start(self):
         self.controller.state["active"] = None
-        self.controller.ref.side_effect = lambda branch: "develop-sha" if branch == agent.BASE else "main-sha"
-        # Newer controllers also compare the local controller with trusted develop.
         self.git.side_effect = None
         self.git.return_value = "trusted controller"
-        with (mock.patch.object(Path, "read_text", return_value="trusted controller"),
-              self.assertRaisesRegex(agent.Stop, "differ|unrelated")):
+        with (mock.patch.object(Path, "read_text", return_value="modified controller"),
+              self.assertRaisesRegex(agent.Stop, "trusted main")):
             self.controller.start(42)
+        self.git.assert_called_once_with(self.controller.root, "show", "origin/main:scripts/dependency_agent.py")
         self.controller.pr.assert_not_called()
-        self.assertFalse(any("merge" in call.args or "push" in call.args for call in self.git.call_args_list))
         self.external_run.assert_not_called()
         self.assertIsNone(self.controller.state["active"])
 
-    def test_base_branch_divergence_prevents_finish_merge(self):
-        for moved in (agent.BASE, agent.PROD):
-            with self.subTest(branch=moved):
-                self.operation.update(attempts=0, stage="prepared")
-                self.controller.ref.side_effect = lambda branch, moved=moved: "moved-sha" if branch == moved else "base-sha"
-                self.controller.finish("trusted-token")
-                self.assertEqual(self.operation["stage"], "needs-fix")
-                self.assertIn("Base branches moved", self.operation["error"])
+    def test_moved_main_prevents_finish_merge(self):
+        self.controller.ref.return_value = "moved-sha"
+        self.controller.finish("trusted-token")
+        self.assertEqual(self.operation["stage"], "needs-fix")
+        self.assertIn("Base main moved", self.operation["error"])
         self.controller.verify.assert_not_called()
         self.git.assert_not_called()
         self.external_run.assert_not_called()
@@ -438,7 +476,7 @@ class ControllerTests(ControllerTestCase):
             return "integration-sha" if args == ("rev-parse", "HEAD") else ""
 
         self.git.side_effect = git_result
-        self.controller.ref.side_effect = ["base-sha", "base-sha", "moved-sha"]
+        self.controller.ref.side_effect = ["base-sha", "moved-sha"]
         self.controller.finish("trusted-token")
         self.controller.verify.assert_called_once()
         self.controller.wait_ci.assert_called_once()
@@ -494,7 +532,7 @@ class FinishTransactionTests(ControllerTestCase):
         self.controller.state = {"active": self.operation, "history": [], "halt": None}
         self.effects = []
         self.saved = []
-        self.remote = {agent.BASE: "base-sha", agent.PROD: "base-sha"}
+        self.remote = {agent.BASE: "base-sha"}
         self.checked_out = "integration-sha"
         self.did_merge = False
         self.failure = failure
@@ -547,11 +585,6 @@ class FinishTransactionTests(ControllerTestCase):
             if args == ("push", "origin", "fixed-sha:refs/heads/dependabot/foo"):
                 record("fix-push", "fixed-sha")
                 return ""
-            if args == ("push", "origin", "github-merged-sha:refs/heads/" + agent.PROD):
-                # Simulate a server-side push succeeding before transport failure.
-                self.remote[agent.PROD] = "github-merged-sha"
-                record("production-push", "github-merged-sha")
-                return ""
             if args == ("worktree", "remove", "--force", str(work)):
                 record("cleanup")
                 return ""
@@ -574,7 +607,7 @@ class FinishTransactionTests(ControllerTestCase):
             return IMAGE
 
         def wait_ci(sha, workflow, event, branch):
-            name = "pr-ci" if event == "pull_request" else "pages" if workflow == "pages.yml" else "develop-ci"
+            name = "pr-ci" if event == "pull_request" else "pages" if workflow == "pages.yml" else "main-ci"
             record(name, sha, workflow, event, branch)
             return "https://ci.invalid/" + name
 
@@ -624,16 +657,15 @@ class FinishTransactionTests(ControllerTestCase):
         self.configure_transaction()
         self.controller.finish("trusted-token")
         significant = [event for event in self.effects if event[0] in {
-            "verify-candidate", "pr-ci", "github-merge", "verify-merged", "develop-ci",
+            "verify-candidate", "pr-ci", "github-merge", "verify-merged", "main-ci",
             "production-push", "pages", "http", "cleanup"}]
         self.assertEqual(significant, [
             ("verify-candidate", "integration-sha"),
             ("pr-ci", "pr-head", "ci.yml", "pull_request", "dependabot/foo"),
             ("github-merge", "pr-head"),
             ("verify-merged", "github-merged-sha"),
-            ("develop-ci", "github-merged-sha", "ci.yml", "push", agent.BASE),
-            ("production-push", "github-merged-sha"),
-            ("pages", "github-merged-sha", "pages.yml", "push", agent.PROD),
+            ("main-ci", "github-merged-sha", "ci.yml", "push", agent.BASE),
+            ("pages", "github-merged-sha", "pages.yml", "push", agent.BASE),
             *(("http", agent.SITE + route) for route in ("/", "/consumi/", "/prezzi/", "/tetto/")),
             ("cleanup",),
         ])
@@ -643,7 +675,9 @@ class FinishTransactionTests(ControllerTestCase):
         self.assertLess(self.effects.index(parents), self.effects.index(reset))
         self.assertLess(self.effects.index(reset), self.effects.index(("verify-merged", "github-merged-sha")))
         self.assertLess(self.effects.index(("save", "merging", None)), self.effects.index(("github-merge", "pr-head")))
-        self.assertLess(self.effects.index(("save", "releasing", None)), self.effects.index(("production-push", "github-merged-sha")))
+        self.assertLess(self.effects.index(("save", "releasing", None)), self.event_names().index("pages"))
+        self.assertFalse(any("push" in call.args for call in self.git.call_args_list))
+        self.assertEqual(self.operation["main_ci"], "https://ci.invalid/main-ci")
         self.assertIsNone(self.controller.state["active"])
         self.assertIsNone(self.controller.state["halt"])
         released = self.controller.state["history"][0]
@@ -652,6 +686,28 @@ class FinishTransactionTests(ControllerTestCase):
         self.assertEqual(released["attempts"], 1)
         self.assertEqual(self.saved[-1], self.controller.state)
         self.assertEqual(self.event_names()[-3:], ["save", "git", "cleanup"])
+
+    def test_main_movement_after_merge_or_ci_or_deploy_halts(self):
+        for fetch_number, stage in ((3, "merging"), (4, "verifying-merged"), (5, "releasing")):
+            with self.subTest(fetch_number=fetch_number):
+                self.configure_transaction()
+                original_fetch = self.controller.fetch.side_effect
+                count = 0
+
+                def fetch(original_fetch=original_fetch, fetch_number=fetch_number):
+                    nonlocal count
+                    count += 1
+                    original_fetch()
+                    if count == fetch_number:
+                        self.remote[agent.BASE] = "unrelated-sha"
+
+                self.controller.fetch.side_effect = fetch
+                self.controller.finish("trusted-token")
+                self.assertEqual(self.operation["stage"], stage)
+                self.assertTrue(self.controller.state["halt"])
+                self.assertIs(self.controller.state["active"], self.operation)
+                self.assertNotIn("http", self.event_names())
+                self.assertFalse(any("push" in call.args for call in self.git.call_args_list))
 
     def test_dirty_candidate_is_committed_then_verified_then_published_unchanged(self):
         self.configure_transaction(dirty=True)
@@ -726,7 +782,7 @@ class FinishTransactionTests(ControllerTestCase):
         self.controller.finish("trusted-token")
         self.assert_halted_without_retry("verifying-merged")
         self.assertIn(("verify-merged", "github-merged-sha"), self.effects)
-        self.assertNotIn("develop-ci", self.event_names())
+        self.assertNotIn("main-ci", self.event_names())
         self.assertNotIn("production-push", self.event_names())
         self.assertNotIn("pages", self.event_names())
 
@@ -748,21 +804,21 @@ class FinishTransactionTests(ControllerTestCase):
         self.assertNotIn("pr-ci", self.event_names())
         self.external_run.assert_not_called()
 
-    def test_ambiguous_production_push_timeout_persists_halt(self):
-        self.configure_transaction(failure="production-push", error=agent.subprocess.TimeoutExpired("git", 120))
+    def test_main_ci_failure_halts_after_publication(self):
+        self.configure_transaction(failure="main-ci")
         self.controller.finish("trusted-token")
-        self.assert_halted_without_retry("releasing")
-        self.assertEqual(self.remote[agent.PROD], "github-merged-sha")
-        self.assertEqual(self.event_names().count("production-push"), 1)
+        self.assert_halted_without_retry("verifying-merged")
+        self.assertEqual(self.remote[agent.BASE], "github-merged-sha")
         self.assertNotIn("pages", self.event_names())
         self.assertNotIn("http", self.event_names())
+        self.assertFalse(any("push" in call.args for call in self.git.call_args_list))
 
     def test_pages_failure_halts_without_smoke_or_retry(self):
         self.configure_transaction(failure="pages")
         self.controller.finish("trusted-token")
         self.assert_halted_without_retry("releasing")
-        self.assertEqual(self.event_names().count("production-push"), 1)
-        self.assertLess(self.event_names().index("production-push"), self.event_names().index("pages"))
+        self.assertNotIn("production-push", self.event_names())
+        self.assertLess(self.event_names().index("main-ci"), self.event_names().index("pages"))
         self.assertNotIn("http", self.event_names())
 
     def test_http_failure_halts_after_pages_without_completion(self):
@@ -771,7 +827,7 @@ class FinishTransactionTests(ControllerTestCase):
         self.assert_halted_without_retry("releasing")
         self.assertLess(self.event_names().index("pages"), self.event_names().index("http"))
         self.assertEqual(self.event_names().count("http"), 1)
-        self.assertEqual(self.event_names().count("production-push"), 1)
+        self.assertNotIn("production-push", self.event_names())
 
 
 class LockIdentityTests(unittest.TestCase):

@@ -2,7 +2,7 @@
 
 > **Versione sperimentale.** Le simulazioni sono stime orientative, non un progetto tecnico o un preventivo.
 
-Il sito è distribuito da `main` su **https://setola.github.io/evolta-casa/**. Il branch predefinito `develop` contiene il lavoro in corso; solo i push su `main` avviano automaticamente il rilascio pubblico.
+Il sito è distribuito da `main` su **https://setola.github.io/evolta-casa/**. Il flusso è main-only: tutte le PR puntano a `main`; il loro merge avvia CI e rilascio pubblico, senza promozioni o push separati. Impostare/verificare su GitHub che il branch predefinito sia `main`: questa configurazione esterna non è garantita dai file del repository.
 
 ## Rilascio su GitHub Pages
 
@@ -10,7 +10,7 @@ Il workflow `.github/workflows/pages.yml` esegue `npm ci`, test e build in un co
 
 1. Su GitHub aprire **Settings → Pages → Build and deployment → Source: GitHub Actions**.
 2. Per Google Maps/Places, aggiungere un repository secret in **Settings → Secrets and variables → Actions → Secrets**: `VITE_GOOGLE_MAPS_API_KEY` e, se necessarie, `VITE_GOOGLE_MAPS_PLACES_API_KEY` / `VITE_GOOGLE_MAPS_JS_API_KEY`. Il workflow supporta anche le **Variables** con gli stessi nomi, ma i Secrets hanno precedenza. La chiave viene incorporata nel bundle durante la build: dopo averla aggiunta o cambiata, rieseguire il workflow su `main`; un reload del sito non basta. Anche se conservate nei Secrets di GitHub, queste sono chiavi browser pubbliche: limitarne API e referrer HTTPS in Google Cloud (per esempio `https://setola.github.io/*`). Senza chiavi il sito parte, ma Maps/Places non sono disponibili.
-3. Portare le modifiche su `main`: ogni push esegue test e deploy. Per una prima anteprima da `develop`, usare **Actions → Deploy GitHub Pages → Run workflow**, selezionando `develop`; il workflow deve essere presente sul branch predefinito. Se l'environment `github-pages` limita i branch, autorizzare anche quello selezionato.
+3. Integrare le modifiche tramite PR verso `main`: ogni push su `main` avvia CI e Pages. Per un rilascio manuale usare **Actions → Deploy GitHub Pages → Run workflow**, selezionando solo `main`; i job rifiutano gli altri branch anche con dispatch manuale. Limitare anche l'environment `github-pages` a `main`.
 4. Controllare l'esito dei job e aprire l'URL restituito dal deploy: normalmente **https://setola.github.io/evolta-casa/**.
 
 Il percorso base e l'origine della sitemap sono ricavati dalla configurazione Pages, anche per un dominio personalizzato. Navigazione, asset, configurazione e PWA rispettano il sottopercorso; le route note e le pagine SEO hanno un proprio `index.html`, quindi sono accessibili direttamente e dopo reload. Gli URL sconosciuti restituiscono il 404 di Pages. Le pagine SEO restano governate dallo YAML pubblico.
@@ -28,13 +28,13 @@ Aprire `http://<DEV_HOST>:4173/evolta-casa/`. Senza queste variabili la build re
 
 ## Aggiornamenti con Dependabot
 
-`.github/dependabot.yml` controlla ogni lunedì alle 08:00 (`Europe/Rome`) dipendenze npm, GitHub Actions e immagini in `compose.yaml`. Non richiede installazioni, token o dipendenze aggiuntive. La configurazione diventa attiva quando viene pubblicata sul branch predefinito **`develop`**; le PR di aggiornamento puntano a quel branch, senza distribuire automaticamente su `main`.
+`.github/dependabot.yml` controlla ogni lunedì alle 08:00 (`Europe/Rome`) dipendenze npm, GitHub Actions e immagini in `compose.yaml`. Non richiede installazioni, token o dipendenze aggiuntive. Pubblicare la configurazione sul branch predefinito e impostare/verificare **`main`** su GitHub; tutti gli ecosistemi hanno `target-branch: main` esplicito. Il merge delle PR distribuisce automaticamente su Pages.
 
 - Gli aggiornamenti npm minor/patch sono raggruppati; i major restano PR separate. Il limite è di 5 PR di versione aperte per ecosistema (non limita le PR di sicurezza).
-- Il workflow `.github/workflows/ci.yml` esegue `npm ci`, test e build con il sottopercorso Pages su tutte le PR e sui push a `develop`, senza segreti né permessi di deploy. Le PR Dependabot hanno permessi limitati: non usare `pull_request_target` per eseguire il loro codice con credenziali privilegiate.
+- Il workflow `.github/workflows/ci.yml` esegue `npm ci`, test e build con il sottopercorso Pages sulle PR verso `main` e sui push a `main`, senza segreti né permessi di deploy. Le PR Dependabot hanno permessi limitati: non usare `pull_request_target` per eseguire il loro codice con credenziali privilegiate.
 - Le immagini Compose sono aggiornate separatamente dalle dipendenze npm. Quando cambia Node, verificare e allineare anche `engines.node` in `package.json`, le immagini container in **entrambi** i workflow e la documentazione. Non assumere che un aggiornamento Compose sincronizzi queste copie.
 - In **Settings → Advanced Security** verificare che **Dependency graph**, **Dependabot alerts** e **Dependabot security updates** siano abilitati (su alcune interfacce sono sotto **Code security**). Gli aggiornamenti di sicurezza sono indipendenti dal calendario settimanale.
-- Il controller locale `scripts/dependency_agent.py` può verificare, correggere tramite una conversazione Pi e integrare le PR, inclusi major e runtime, fino al rilascio Pages. Non usa l'auto-merge GitHub. La procedura, i limiti e il recupero umano sono descritti in **[docs/dependency-agent.md](docs/dependency-agent.md)**; il task periodico pi-web richiede attivazione esplicita. Si raccomandano check **Test and build** e **Automation safeguards** obbligatori su `develop`. L'agente non aggira protezioni o revisioni richieste.
+- Il controller locale `scripts/dependency_agent.py` può verificare, correggere tramite una conversazione Pi e integrare le PR, inclusi major e runtime, fino al rilascio Pages. Non usa l'auto-merge GitHub. La procedura, i limiti e il recupero umano sono descritti in **[docs/dependency-agent.md](docs/dependency-agent.md)**; il task periodico pi-web richiede attivazione esplicita. Prima di abilitare il flusso, configurare/verificare su GitHub protezioni obbligatorie su `main`: PR, check **Test and build** e **Automation safeguards** verdi sulla revisione corrente e aggiornata alla base, niente push diretti/forzati né bypass, revisioni richieste per automazione e file protetti. L'agente non aggira protezioni o revisioni richieste. **Pages può partire subito al merge, prima dei retest postmerge del controller**: questi rilevano problemi ma non bloccano preventivamente il deploy. Il controller verifica genitori del merge, retest, CI push e Pages sullo SHA esatto e HTTP; un errore ferma la coda, senza rollback automatico.
 
 Riferimento: [configurazione ufficiale Dependabot](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/secure-your-dependencies/configure-version-updates).
 

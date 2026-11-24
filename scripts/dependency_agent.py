@@ -25,8 +25,7 @@ import urllib.request
 
 REPO = "setola/evolta-casa"
 BOT = "dependabot[bot]"
-BASE = "develop"
-PROD = "main"
+BASE = "main"
 SITE = "https://setola.github.io/evolta-casa"
 MAX_ATTEMPTS = 3
 WORKFLOWS = (".github/workflows/ci.yml", ".github/workflows/pages.yml")
@@ -228,7 +227,7 @@ class Controller:
         if git(self.root, "remote", "get-url", "origin") not in (
                 f"git@github.com:{REPO}.git", f"https://github.com/{REPO}.git"):
             raise Stop("Unexpected origin; refusing to publish")
-        git(self.root, "fetch", "origin", BASE, PROD)
+        git(self.root, "fetch", "origin", BASE)
 
     def ref(self, name):
         return git(self.root, "rev-parse", f"origin/{name}")
@@ -238,7 +237,7 @@ class Controller:
         if (pr["user"]["login"] != BOT or pr["user"]["type"] != "Bot"
                 or pr["head"]["repo"] is None or pr["head"]["repo"]["full_name"] != REPO
                 or pr["base"]["ref"] != BASE or pr["draft"]):
-            raise Stop("Not an eligible same-repository Dependabot PR to develop")
+            raise Stop("Not an eligible same-repository Dependabot PR to main")
         return pr
 
     def candidates(self):
@@ -372,9 +371,7 @@ class Controller:
         self.fetch()
         trusted = "scripts/dependency_agent.py"
         if (self.root / trusted).read_text().strip() != git(self.root, "show", f"origin/{BASE}:{trusted}"):
-            raise Stop("Local controller differs from trusted develop; review/sync it first")
-        if self.ref(BASE) != self.ref(PROD):
-            raise Stop("develop and main differ: refusing to release unrelated changes")
+            raise Stop("Local controller differs from trusted main; review/sync it first")
         seen = {(h["number"], h["head"]) for h in self.state["history"]}
         choices = self.candidates() if number is None else [self.pr(number)]
         choices = [p for p in choices if (p["number"], p["head"]["sha"]) not in seen]
@@ -443,8 +440,8 @@ class Controller:
             pr = self.pr(a["number"])
             if pr["state"] != "open" or pr["head"]["sha"] != a["head"] or pr["head"]["ref"] != a["branch"]:
                 raise Stop("PR changed: abort this operation and prepare the new revision")
-            if self.ref(BASE) != a["base"] or self.ref(PROD) != a["base"]:
-                raise Stop("Base branches moved: abort and prepare again")
+            if self.ref(BASE) != a["base"]:
+                raise Stop("Base main moved: abort and prepare again")
             work = Path(a["worktree"])
             if git(work, "ls-files", "-u"):
                 raise Stop("Unresolved merge conflicts")
@@ -472,7 +469,7 @@ class Controller:
             a["pr_ci"] = self.wait_ci(a["head"], "ci.yml", "pull_request", a["branch"])
             self.fetch()
             pr = self.pr(a["number"])
-            if pr["head"]["sha"] != a["head"] or self.ref(BASE) != a["base"] or self.ref(PROD) != a["base"]:
+            if pr["head"]["sha"] != a["head"] or self.ref(BASE) != a["base"]:
                 raise Stop("Refs changed after verification; refusing merge")
         except Exception as error:
             if a["stage"] == "publishing-fix" or isinstance(error, Unsafe):
@@ -493,8 +490,8 @@ class Controller:
                 raise Stop("GitHub did not merge the PR")
             a["merged"] = merged["merge_commit_sha"]
             self.fetch()
-            if self.ref(BASE) != a["merged"] or self.ref(PROD) != a["base"]:
-                raise Stop("Branch moved during merge; not promoting unrelated changes")
+            if self.ref(BASE) != a["merged"]:
+                raise Stop("Main moved during merge; refusing unrelated changes")
             parents = git(self.root, "show", "-s", "--format=%P", a["merged"]).split()
             if parents != [a["base"], a["head"]]:
                 raise Stop("Unexpected merge parents; manual inspection required")
@@ -503,17 +500,17 @@ class Controller:
             a["verifying_sha"] = a["merged"]
             self.save()
             self.verify(a)
-            a["develop_ci"] = self.wait_ci(a["merged"], "ci.yml", "push", BASE)
+            a["main_ci"] = self.wait_ci(a["merged"], "ci.yml", "push", BASE)
             self.fetch()
-            if self.ref(BASE) != a["merged"] or self.ref(PROD) != a["base"]:
-                raise Stop("Branches changed before promotion")
+            if self.ref(BASE) != a["merged"]:
+                raise Stop("Main changed before deploy verification")
             a["stage"] = "releasing"
             self.save()
-            git(work, "push", "origin", f"{a['merged']}:refs/heads/{PROD}")
-            a["deploy"] = self.wait_ci(a["merged"], "pages.yml", "push", PROD)
+            # Merging into main already publishes; never push a promotion commit.
+            a["deploy"] = self.wait_ci(a["merged"], "pages.yml", "push", BASE)
             self.fetch()
-            if self.ref(PROD) != a["merged"]:
-                raise Stop("Production branch moved during deploy")
+            if self.ref(BASE) != a["merged"]:
+                raise Stop("Main moved during deploy")
             for route in ("/", "/consumi/", "/prezzi/", "/tetto/"):
                 with urllib.request.urlopen(SITE + route, timeout=30) as response:
                     if response.status != 200 or b"<html" not in response.read().lower():
@@ -521,7 +518,7 @@ class Controller:
             a["stage"] = "released"
             self.comment(a, f"Pi dependency agent: merged and released `{a['merged']}`.\n\n"
                          f"Local npm ci, tests, build and runtime alignment passed.\n"
-                         f"PR CI: {a['pr_ci']}\nIntegration CI: {a['develop_ci']}\n"
+                         f"PR CI: {a['pr_ci']}\nMain CI: {a['main_ci']}\n"
                          f"Production deploy: {a['deploy']}\nHTTP smoke checks passed (home, consumi, prezzi, tetto).")
             self.complete(a)
         except Exception as error:
